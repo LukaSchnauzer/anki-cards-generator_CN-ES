@@ -1,0 +1,19 @@
+<div style="font-family: 'Segoe UI', Arial, sans-serif; padding: 20px; background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); border-radius: 12px; color: white; margin-bottom: 16px; text-align: center;">
+  <div style="font-size: 32px; font-weight: bold; margin-bottom: 8px;">{{MissingPart}}</div>
+  <div style="font-size: 18px; opacity: 0.95;">{{Pinyin}}</div>
+</div>
+<div style="padding: 16px; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+  <div style="margin: 12px 0; padding: 10px; background: #f7fafc; border-radius: 6px; color: #4a5568;">{{SentenceES}}</div>
+  {{#Audio}}<div style="margin: 12px 0; text-align: center; padding: 12px; background: #f0f9ff; border-radius: 6px;">
+    <div style="font-size: 16px; color: #2d3748; margin-bottom: 4px; font-weight: 500;">&#x1F50A; {{SentenceCN}}</div>
+    <div style="color: #718096; font-size: 14px; margin-bottom: 8px;">{{SentenceES}}</div>
+    <audio controls src="{{Audio}}" style="max-width: 300px; height: 32px;"></audio>
+  </div>{{/Audio}}
+  <div style="font-size: 18px; color: #2d3748; margin: 12px 0; font-weight: 600;">{{Meaning}}</div>
+  {{#Pattern}}<div style="margin: 12px 0; padding: 10px; background: #edf2f7; border-left: 3px solid #38ef7d; border-radius: 4px; font-size: 14px; color: #4a5568;">&#x1F517; <strong>Patrón:</strong> {{Pattern}}</div>{{/Pattern}}
+  {{#Tips}}<div style="margin: 12px 0; padding: 10px; background: #edf2f7; border-left: 3px solid #667eea; border-radius: 4px; font-size: 14px; color: #4a5568;">&#x1F4A1; <strong>Notas:</strong> {{Tips}}</div>{{/Tips}}
+  <div style="margin-top: 12px; padding: 8px; background: #f7fafc; border-radius: 4px;">
+    <div style="font-size: 13px; color: #4a5568;"><strong>Tipo:</strong> {{POS}} | <strong>Registro:</strong> {{Register}}</div>
+    {{#Frecuencia}}<div style="font-size: 13px; color: #4a5568; margin-top: 4px;"><strong>Nivel:</strong> {{Frecuencia}}</div>{{/Frecuencia}}
+  </div>
+</div>

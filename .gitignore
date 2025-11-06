@@ -1,0 +1,99 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# Type checkers
+.mypy_cache/
+.pyre/
+.pytype/
+.dmypy.json
+dmypy.json
+.ruff_cache/
+
+# Environments
+.venv/
+venv/
+ENV/
+env/
+.conda/
+conda_env/
+.venv
+
+# Project venv
+anki-venv/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# IDEs/editors
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Logs
+*.log
+
+# Local dotenv
+.env
+.env.*
+!.env.example
+
+# Project outputs
+outputs/*
+!outputs/.gitkeep
+
+# Audio files
+resources/audios/*
+!resources/audios/.gitkeep
+
+# Git
+.git/
+.gitmodules
+.gitconfig

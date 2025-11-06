@@ -1,0 +1,4 @@
+requests
+edge-tts
+gtts
+python-dotenv
