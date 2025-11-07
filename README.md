@@ -22,10 +22,19 @@ Un pipeline completo para generar tarjetas Anki de alta calidad para el aprendiz
 # 1. Generar CSV de vocabulario con enriquecimiento IA
 python main.py vocab --input data/complete.json --output outputs/vocab.csv
 
-# 2. Generar archivos de audio
+# 2. Validar calidad del CSV generado
+python main.py validate-csv --csv outputs/vocab.csv
+
+# 3. Validar cobertura (opcional)
+python main.py validate-coverage --json data/complete.json --csv outputs/vocab.csv
+
+# 4. Generar archivos de audio
 python main.py audio --engine gtts --csv outputs/vocab.csv
 
-# 3. Crear mazo de Anki
+# 5. Validar archivos de audio
+python main.py validate-audio --csv outputs/vocab.csv
+
+# 6. Crear mazo de Anki
 python main.py anki --csv outputs/vocab.csv --limit 10
 ```
 
@@ -38,8 +47,9 @@ python main.py anki --csv outputs/vocab.csv --limit 10
 Sigue estos pasos en orden para mejores resultados:
 
 ```
-1. Generar CSV de Vocabulario  →  2. Generar Archivos de Audio  →  3. Crear Mazo de Anki
-   (Enriquecimiento IA)             (Generación TTS)                  (Creación de tarjetas)
+1. Generar CSV  →  2. Validar CSV  →  3. Validar      →  4. Generar  →  5. Validar  →  6. Crear Mazo
+   (Enriquec.)      (Calidad)          Cobertura         Audio         Audio         (Tarjetas)
+                                        (Opcional)        (TTS)         (Archivos)
 ```
 
 ---
@@ -184,7 +194,174 @@ python main.py anki --csv outputs/hsk.csv --limit 50 --force-recreate
 
 ---
 
-### Paso 4: Exportar Mazo de Anki (Opcional) 📋
+### Paso 4: Validar Calidad del CSV ✓
+
+Valida la calidad del CSV generado para detectar problemas antes de crear las tarjetas.
+
+**Comando:**
+```bash
+python main.py validate-csv --csv outputs/vocab.csv
+```
+
+**Opciones:**
+- `--csv`: Archivo CSV a validar (requerido)
+- `--errors-only`: Mostrar solo errores críticos (ocultar warnings)
+
+**Validaciones incluidas:**
+- ✅ Campos requeridos presentes y no vacíos
+- ✅ Conteo correcto de oraciones (3 esperadas)
+- ✅ Conteo correcto de colocaciones (3-5 esperadas)
+- ✅ Hanzi aparece en las oraciones de ejemplo
+- ✅ Formato de definición (longitud apropiada)
+- ✅ Formato de pinyin (minúsculas, marcas tonales)
+- ✅ Etiquetas HSK y frecuencia presentes
+- ✅ **Cobertura de limpieza de pinyin** (detecta pinyin que no será limpiado)
+- ✅ Formato de colocaciones correcto
+
+**Ejemplos:**
+```bash
+# Validar CSV completo
+python main.py validate-csv --csv outputs/hsk_vocab_full.csv
+
+# Ver solo errores críticos
+python main.py validate-csv --csv outputs/vocab.csv --errors-only
+```
+
+**Salida de ejemplo:**
+```
+================================================================================
+VALIDATION RESULTS
+================================================================================
+Total rows:    1000
+Errors:        5
+Warnings:      23
+Total issues:  28
+================================================================================
+
+ISSUES FOUND:
+[ERROR] Row 145 (测试) - example_sentence: '测试' no aparece en ninguna oracion
+[WARN] Row 267 (词汇) - example_sentence[2]: Posible pinyin fuera de parentesis (no sera limpiado)
+[WARN] Row 389 (汉字) - collocations: Esperadas 3-5 colocaciones, encontradas 2
+```
+
+---
+
+### Paso 5: Validar Cobertura JSON vs CSV ✓
+
+Verifica qué entradas del JSON original fueron generadas exitosamente en el CSV.
+
+**Comando:**
+```bash
+python main.py validate-coverage --json resources/complete.json --csv outputs/vocab.csv
+```
+
+**Opciones:**
+- `--json`: Archivo JSON de entrada (requerido)
+- `--csv`: Archivo CSV generado (requerido)
+- `--show-missing`: Mostrar lista de entradas faltantes
+- `--export-missing`: Exportar entradas faltantes a JSON para re-procesamiento
+
+**Ejemplos:**
+```bash
+# Validación básica
+python main.py validate-coverage --json resources/complete.json --csv outputs/vocab.csv
+
+# Ver lista de faltantes
+python main.py validate-coverage --json resources/complete.json --csv outputs/vocab.csv --show-missing
+
+# Exportar faltantes para re-procesar
+python main.py validate-coverage --json resources/complete.json --csv outputs/vocab.csv --export-missing missing.json
+
+# Re-procesar solo las faltantes
+python main.py vocab --input missing.json --output outputs/vocab_retry.csv
+```
+
+**Salida de ejemplo:**
+```
+============================================================
+COVERAGE VALIDATION RESULTS
+============================================================
+Total entries in JSON:     11000
+Total entries in CSV:      10847
+Missing entries:           153
+Coverage:                  98.61%
+============================================================
+
+⚠️  153 entries from JSON were not generated in CSV
+
+✅ Exported 153 missing entries to: missing.json
+```
+
+**Flujo de trabajo recomendado:**
+1. Generar vocabulario inicial
+2. Validar cobertura y exportar faltantes
+3. Re-procesar solo las entradas faltantes
+4. Combinar CSVs (si es necesario)
+
+---
+
+### Paso 6: Validar Archivos de Audio 🔊
+
+Verifica que todos los archivos de audio requeridos existan para las entradas del CSV.
+
+**Comando:**
+```bash
+python main.py validate-audio --csv outputs/vocab.csv
+```
+
+**Opciones:**
+- `--csv`: Archivo CSV a validar (requerido)
+- `--audio-dir`: Directorio de audio (default: resources/audios)
+- `--show-missing`: Mostrar lista de archivos faltantes
+- `--export-missing`: Exportar lista de faltantes a archivo de texto
+
+**Archivos validados por entrada:**
+- ✅ 1 archivo de audio de palabra: `word_{hanzi}_{hash}.mp3`
+- ✅ 3 archivos de audio de oraciones: `{sentence}_{hash}.mp3`
+- ✅ Total: 4 archivos por entrada
+
+**Ejemplos:**
+```bash
+# Validación básica
+python main.py validate-audio --csv outputs/vocab.csv
+
+# Ver lista de archivos faltantes
+python main.py validate-audio --csv outputs/vocab.csv --show-missing
+
+# Exportar lista de faltantes
+python main.py validate-audio --csv outputs/vocab.csv --export-missing missing_audio.txt
+
+# Usar directorio de audio personalizado
+python main.py validate-audio --csv outputs/vocab.csv --audio-dir /path/to/audios
+```
+
+**Salida de ejemplo:**
+```
+================================================================================
+AUDIO VALIDATION RESULTS
+================================================================================
+Total audio files expected:  4000
+Missing audio files:         12
+Coverage:                    99.70%
+================================================================================
+
+WARNING: 12 audio files are missing!
+
+MISSING AUDIO FILES:
+  Row 145 (测试) - word
+    Expected: resources/audios/word_测试_a1b2c3d4.mp3
+  Row 267 (词汇) - sentence[2]
+    Expected: resources/audios/这是一个例句。_e5f6g7h8.mp3
+```
+
+**Nota importante:**
+- La validación usa la misma lógica de limpieza de pinyin que la generación de audio
+- Los hashes se calculan sobre texto **sin pinyin** en paréntesis
+- Si hay archivos faltantes, re-ejecuta la generación de audio para esas entradas
+
+---
+
+### Paso 7: Exportar Mazo de Anki (Opcional) 📋
 
 Exporta el contenido del mazo de Anki a JSON para respaldo o análisis.
 
@@ -243,7 +420,10 @@ ChinoSRS/
 │   │   └── audio_card_back.html
 │   │
 │   └── utils/                  # Scripts de utilidad
-│       └── dump_deck.py       # Herramienta de exportación de mazo
+│       ├── dump_deck.py       # Herramienta de exportación de mazo
+│       ├── validate_csv.py    # ✓ Validación de calidad de CSV
+│       ├── validate_audio.py  # ✓ Validación de archivos de audio
+│       └── validate_coverage.py # ✓ Validación de cobertura JSON vs CSV
 │
 ├── outputs/                    # Archivos CSV generados
 └── resources/
@@ -256,16 +436,34 @@ ChinoSRS/
 
 ### Vocabulario HSK Completo
 
-El repositorio incluye el archivo `data/complete.json` que contiene **TODO el vocabulario HSK niveles 1-6**:
+El repositorio incluye el archivo `resources/complete.json` que contiene **vocabulario HSK completo** con **11,494 entradas**:
 
-- **HSK 1**: ~150 palabras
-- **HSK 2**: ~150 palabras  
-- **HSK 3**: ~300 palabras
-- **HSK 4**: ~600 palabras
-- **HSK 5**: ~1,300 palabras
-- **HSK 6**: ~2,500 palabras
+#### HSK Antiguo (2010) - 5,000 palabras
+- **HSK 1**: 150 palabras
+- **HSK 2**: 150 palabras  
+- **HSK 3**: 299 palabras
+- **HSK 4**: 601 palabras
+- **HSK 5**: 1,300 palabras
+- **HSK 6**: 2,500 palabras
 
-**Total**: ~5,000 palabras del vocabulario oficial HSK
+#### HSK Nuevo (2021) - 10,993 palabras
+- **HSK 1**: 511 palabras
+- **HSK 2**: 755 palabras
+- **HSK 3**: 959 palabras
+- **HSK 4**: 972 palabras
+- **HSK 5**: 1,061 palabras
+- **HSK 6**: 1,126 palabras
+- **HSK 7+**: 5,609 palabras
+
+#### Distribución por Frecuencia
+- **Top 1K**: 759 palabras (más comunes)
+- **Top 3K**: 1,528 palabras
+- **Top 5K**: 1,382 palabras
+- **Top 10K**: 2,873 palabras
+- **Raras**: 4,859 palabras
+- **Sin frecuencia**: 93 palabras
+
+**Fuente**: [Complete HSK Vocabulary](https://github.com/drkameleon/complete-hsk-vocabulary)
 
 Este archivo JSON está listo para ser procesado por el generador de vocabulario.
 
@@ -484,6 +682,79 @@ ANKI_DECK_NAME=Chino SRS
 - Usa `--force-recreate` cuando modifiques las plantillas
 - Usa `--limit` para pruebas antes de crear el mazo completo
 - Mantén Anki ejecutándose durante la creación de tarjetas
+
+---
+
+## 🔍 Herramientas de Validación
+
+### Validación de Calidad (validate-csv)
+
+Detecta problemas comunes en el CSV generado:
+
+**Validaciones implementadas:**
+- ✅ Campos requeridos vacíos
+- ✅ Conteo incorrecto de oraciones/traducciones
+- ✅ Desbalance entre oraciones CN y traducciones ES
+- ✅ Conteo incorrecto de colocaciones (3-5 esperadas)
+- ✅ Hanzi no aparece en oraciones de ejemplo
+- ✅ Definiciones muy cortas o muy largas
+- ✅ Pinyin en mayúsculas o con números
+- ✅ Etiquetas HSK/frecuencia faltantes
+- ✅ **Pinyin fuera de paréntesis** (no será limpiado)
+- ✅ **Pinyin en corchetes/llaves** (no será limpiado)
+- ✅ **Colocaciones sin paréntesis** (formato incorrecto)
+
+**Uso recomendado:**
+```bash
+# Después de generar el CSV
+python main.py validate-csv --csv outputs/vocab.csv
+
+# Ver solo errores críticos
+python main.py validate-csv --csv outputs/vocab.csv --errors-only
+```
+
+### Validación de Archivos de Audio (validate-audio)
+
+Verifica que todos los archivos de audio existan:
+
+**Validaciones implementadas:**
+- ✅ Audio de palabra (word_{hanzi}_{hash}.mp3)
+- ✅ Audio de 3 oraciones ({sentence}_{hash}.mp3)
+- ✅ Usa misma lógica de limpieza de pinyin
+- ✅ Calcula hashes correctamente
+
+**Uso recomendado:**
+```bash
+# Después de generar audio
+python main.py validate-audio --csv outputs/vocab.csv
+
+# Ver archivos faltantes
+python main.py validate-audio --csv outputs/vocab.csv --show-missing
+
+# Exportar lista de faltantes
+python main.py validate-audio --csv outputs/vocab.csv --export-missing missing_audio.txt
+```
+
+### Validación de Cobertura (validate-coverage)
+
+Verifica qué entradas del JSON fueron generadas exitosamente:
+
+**Funcionalidades:**
+- ✅ Compara JSON de entrada vs CSV generado
+- ✅ Calcula porcentaje de cobertura
+- ✅ Lista entradas faltantes
+- ✅ Exporta faltantes a JSON para re-procesamiento
+
+**Flujo de trabajo:**
+```bash
+# 1. Validar cobertura
+python main.py validate-coverage --json resources/complete.json --csv outputs/vocab.csv --export-missing missing.json
+
+# 2. Re-procesar solo las faltantes
+python main.py vocab --input missing.json --output outputs/vocab_retry.csv
+
+# 3. Combinar CSVs (manualmente o con script)
+```
 
 ---
 

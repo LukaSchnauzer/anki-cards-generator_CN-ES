@@ -160,6 +160,87 @@ def workflow_dump_deck(args):
     return run_command(cmd, "Anki deck dump")
 
 
+def workflow_validate_csv(args):
+    """Workflow 5: Validate CSV quality."""
+    print_header("✓ Validate CSV Quality")
+    
+    if not args.csv:
+        print_error("CSV file is required. Use --csv <path>")
+        return False
+    
+    if not os.path.exists(args.csv):
+        print_error(f"CSV file not found: {args.csv}")
+        return False
+    
+    python_cmd = get_python_cmd()
+    cmd = [python_cmd, "src/utils/validate_csv.py", args.csv]
+    
+    if args.errors_only:
+        cmd.append("--errors-only")
+    
+    return run_command(cmd, "CSV quality validation")
+
+
+def workflow_validate_audio(args):
+    """Workflow 6: Validate audio files."""
+    print_header("✓ Validate Audio Files")
+    
+    if not args.csv:
+        print_error("CSV file is required. Use --csv <path>")
+        return False
+    
+    if not os.path.exists(args.csv):
+        print_error(f"CSV file not found: {args.csv}")
+        return False
+    
+    python_cmd = get_python_cmd()
+    cmd = [python_cmd, "src/utils/validate_audio.py", args.csv]
+    
+    if args.audio_dir:
+        cmd.extend(["--audio-dir", args.audio_dir])
+    
+    if args.show_missing:
+        cmd.append("--show-missing")
+    
+    if args.export_missing:
+        cmd.extend(["--export-missing", args.export_missing])
+    
+    return run_command(cmd, "Audio files validation")
+
+
+def workflow_validate_coverage(args):
+    """Workflow 7: Validate coverage between JSON and CSV."""
+    print_header("✓ Validate Coverage")
+    
+    if not args.json:
+        print_error("JSON file is required. Use --json <path>")
+        return False
+    
+    if not args.csv:
+        print_error("CSV file is required. Use --csv <path>")
+        return False
+    
+    if not os.path.exists(args.json):
+        print_error(f"JSON file not found: {args.json}")
+        return False
+    
+    if not os.path.exists(args.csv):
+        print_error(f"CSV file not found: {args.csv}")
+        return False
+    
+    python_cmd = get_python_cmd()
+    cmd = [python_cmd, "src/utils/validate_coverage.py", args.json, args.csv]
+    
+    if args.show_missing:
+        cmd.append("--show-missing")
+    
+    if args.export_missing:
+        cmd.extend(["--export-missing", args.export_missing])
+        print_info(f"Missing entries will be exported to: {args.export_missing}")
+    
+    return run_command(cmd, "Coverage validation")
+
+
 
 
 def main():
@@ -183,6 +264,18 @@ Examples:
   
   # Dump Anki deck
   python main.py dump --deck "Chino SRS" --output deck_backup.json
+  
+  # Validate CSV quality
+  python main.py validate-csv --csv outputs/vocab.csv
+  
+  # Validate audio files
+  python main.py validate-audio --csv outputs/vocab.csv
+  
+  # Validate coverage
+  python main.py validate-coverage --json resources/complete.json --csv outputs/vocab.csv
+  
+  # Validate and export missing entries
+  python main.py validate-coverage --json resources/complete.json --csv outputs/vocab.csv --export-missing missing.json
         """
     )
     
@@ -212,6 +305,31 @@ Examples:
     dump_parser.add_argument("--deck", default="Chino SRS", help="Deck name")
     dump_parser.add_argument("--output", help="Output file")
     
+    # Validate CSV quality
+    validate_csv_parser = subparsers.add_parser("validate-csv", help="Validate CSV quality")
+    validate_csv_parser.add_argument("--csv", required=True, help="CSV file to validate")
+    validate_csv_parser.add_argument("--errors-only", action="store_true",
+                                     help="Show only errors (hide warnings)")
+    
+    # Validate audio files
+    validate_audio_parser = subparsers.add_parser("validate-audio", help="Validate audio files exist")
+    validate_audio_parser.add_argument("--csv", required=True, help="CSV file to validate")
+    validate_audio_parser.add_argument("--audio-dir", default="resources/audios",
+                                      help="Audio directory (default: resources/audios)")
+    validate_audio_parser.add_argument("--show-missing", action="store_true",
+                                      help="Show list of missing audio files")
+    validate_audio_parser.add_argument("--export-missing", metavar="OUTPUT_FILE",
+                                      help="Export missing files list to text file")
+    
+    # Validate coverage
+    validate_cov_parser = subparsers.add_parser("validate-coverage", help="Validate coverage between JSON and CSV")
+    validate_cov_parser.add_argument("--json", required=True, help="Input JSON file")
+    validate_cov_parser.add_argument("--csv", required=True, help="Output CSV file")
+    validate_cov_parser.add_argument("--show-missing", action="store_true", 
+                                     help="Show list of missing entries")
+    validate_cov_parser.add_argument("--export-missing", metavar="OUTPUT_JSON",
+                                     help="Export missing entries to JSON for re-processing")
+    
     args = parser.parse_args()
     
     if not args.command:
@@ -236,6 +354,12 @@ Examples:
         success = workflow_create_anki_deck(args)
     elif args.command == "dump":
         success = workflow_dump_deck(args)
+    elif args.command == "validate-csv":
+        success = workflow_validate_csv(args)
+    elif args.command == "validate-audio":
+        success = workflow_validate_audio(args)
+    elif args.command == "validate-coverage":
+        success = workflow_validate_coverage(args)
     
     # Exit with appropriate code
     if success:
