@@ -14,15 +14,15 @@ def load_template(template_name: str) -> str:
 
 def create_model_sentence(force_recreate: bool = False):
     """Create SentenceCard model."""
-    model_name = "SentenceCard"
+    model_name = "ChinoSRS_SentenceCard"
     if force_recreate:
         delete_model(model_name)
     if model_exists(model_name):
         return
 
     fields = [
-        "Hanzi", "Pinyin", "Meaning", "SentenceCN", "SentenceES",
-        "Tips", "Collocations", "POS", "Register", "Frecuencia", "Tags", "Audio",
+        "SortKey", "Hanzi", "Pinyin", "Meaning", "SentenceCN", "SentenceES",
+        "Tips", "Collocations", "POS", "Register", "Frecuencia", "Tags", "Audio", "WordAudio",
         "FrontLine", "Hint1", "Hint2", "Hint3"
     ]
     
@@ -38,16 +38,16 @@ def create_model_sentence(force_recreate: bool = False):
 
 def create_model_pattern(force_recreate: bool = False):
     """Create PatternCard model."""
-    model_name = "PatternCard"
+    model_name = "ChinoSRS_PatternCard"
     if force_recreate:
         delete_model(model_name)
     if model_exists(model_name):
         return
 
     fields = [
-        "Hanzi", "Pinyin", "Meaning", "SentenceCN", "SentenceES", "Tips", "Pattern",
-        "POS", "Register", "Frecuencia", "Audio", "Tags",
-        "ClozeSentence", "MissingPart", "Hint1", "Hint2", "Hint3"
+        "SortKey", "Hanzi", "Pinyin", "Meaning", "SentenceCN", "SentenceES", "Tips", "Pattern",
+        "POS", "Register", "Frecuencia", "Audio", "WordAudio", "Tags",
+        "ClozeSentence", "MissingPart", "Hint1", "Hint2", "Hint3", "Hint4"
     ]
     
     templates = [{
@@ -62,16 +62,16 @@ def create_model_pattern(force_recreate: bool = False):
 
 def create_model_audio(force_recreate: bool = False):
     """Create AudioCard model."""
-    model_name = "AudioCard"
+    model_name = "ChinoSRS_AudioCard"
     if force_recreate:
         delete_model(model_name)
     if model_exists(model_name):
         return
 
     fields = [
-        "Hanzi", "Pinyin", "Meaning", "SentenceCN", "SentenceES", "Tips",
-        "POS", "Register", "Frecuencia", "Tags", "Audio",
-        "Hint1", "Hint2", "Hint3"
+        "SortKey", "Hanzi", "Pinyin", "Meaning", "SentenceCN", "SentenceES", "Tips",
+        "POS", "Register", "Frecuencia", "Tags", "Audio", "WordAudio",
+        "Hint1", "Hint2", "Hint3", "Hint4"
     ]
     
     templates = [{

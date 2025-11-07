@@ -111,33 +111,13 @@ def workflow_generate_audio(args):
     
     python_cmd = get_python_cmd()
     
-    # Determine which TTS engine to use
-    if args.engine == "gtts":
-        script = "src/audio/generate_audio_gtts.py"
-        engine_name = "Google TTS (gTTS)"
-    elif args.engine == "edge":
-        script = "src/audio/generate_audio.py"
-        engine_name = "Microsoft Edge TTS"
-    else:  # both
-        print_info("Generating audio with both engines...")
-        
-        cmd_gtts = [python_cmd, "src/audio/generate_audio_gtts.py"]
-        cmd_edge = [python_cmd, "src/audio/generate_audio.py"]
-        
-        if args.csv:
-            cmd_gtts.extend(["--csv", args.csv])
-            cmd_edge.extend(["--csv", args.csv])
-        
-        print_info("Starting with Google TTS...")
-        success1 = run_command(cmd_gtts, "Google TTS generation")
-        
-        print_info("\nStarting with Microsoft Edge TTS...")
-        success2 = run_command(cmd_edge, "Edge TTS generation")
-        
-        return success1 and success2
+    # Determine engine name for display
+    engine_name = "Google TTS" if args.engine == "gtts" else "Azure TTS"
     
-    cmd = [python_cmd, script, "--csv", args.csv]
+    # Run audio generation
+    cmd = [python_cmd, "src/audio/generate_audio.py", "--csv", args.csv, "--engine", args.engine]
     print_info(f"Using CSV: {args.csv}")
+    print_info(f"Engine: {engine_name}")
     
     return run_command(cmd, f"Audio generation with {engine_name}")
 
@@ -216,7 +196,7 @@ Examples:
     
     # Audio generation
     audio_parser = subparsers.add_parser("audio", help="Generate audio files")
-    audio_parser.add_argument("--engine", choices=["gtts", "edge", "both"], default="gtts",
+    audio_parser.add_argument("--engine", choices=["gtts", "azure"], default="gtts",
                              help="TTS engine to use (default: gtts)")
     audio_parser.add_argument("--csv", required=True, help="CSV file to process")
     

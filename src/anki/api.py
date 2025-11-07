@@ -87,3 +87,20 @@ def find_audio_for_sentence(sentence: str, audio_dir: str = "resources/audios") 
             return os.path.abspath(os.path.join(audio_dir, filename))
     
     return None
+
+
+def find_audio_for_word(hanzi: str, audio_dir: str = "resources/audios") -> Optional[str]:
+    """
+    Find audio file for a given word (hanzi) using hash-based matching.
+    Returns absolute path if found, None otherwise.
+    """
+    if not hanzi or not os.path.isdir(audio_dir):
+        return None
+    
+    word_hash = hashlib.md5(hanzi.encode('utf-8')).hexdigest()[:8]
+    
+    for filename in os.listdir(audio_dir):
+        if filename.startswith('word_') and filename.endswith('.mp3') and word_hash in filename:
+            return os.path.abspath(os.path.join(audio_dir, filename))
+    
+    return None

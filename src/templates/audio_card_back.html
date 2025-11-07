@@ -1,6 +1,9 @@
 <div style="font-family: 'Segoe UI', Arial, sans-serif; padding: 20px; background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); border-radius: 12px; color: white; margin-bottom: 16px; text-align: center;">
   <div style="font-size: 32px; font-weight: bold; margin: 12px 0;">{{Hanzi}}</div>
   <div style="font-size: 18px; opacity: 0.95;">{{Pinyin}}</div>
+  {{#WordAudio}}<div style="margin-top: 12px;">
+    <audio controls src="{{WordAudio}}" style="max-width: 250px; height: 28px;"></audio>
+  </div>{{/WordAudio}}
 </div>
 <div style="padding: 16px; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
   {{#Audio}}<div style="margin-bottom: 12px; text-align: center; padding: 12px; background: #f0f9ff; border-radius: 6px;">

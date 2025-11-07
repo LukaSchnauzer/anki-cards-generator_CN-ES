@@ -34,11 +34,46 @@ def first_piece(text: str) -> str:
     return parts[0] if parts else ""
 
 
-def remove_parentheses(text: str) -> str:
-    """Remove content in parentheses from text."""
+def longest_piece(text: str) -> str:
+    """Get longest piece from pipe-separated text (more context)."""
     if not text:
         return ""
-    return re.sub(r'\s*\([^)]*\)', '', text).strip()
+    parts = [p.strip() for p in str(text).split("|") if p.strip()]
+    if not parts:
+        return ""
+    # Return the longest piece (more context for hints)
+    return max(parts, key=len)
+
+
+def remove_parentheses(text: str) -> str:
+    """Remove content in parentheses and any trailing translation.
+    
+    Handles:
+    - 地质构造 (estructura geológica) → 地质构造
+    - 第一印象 (dì yī yìnxiàng) - primera impresión → 第一印象
+    """
+    if not text:
+        return ""
+    # Remove parentheses and everything after them (including " - translation")
+    result = re.sub(r'\s*\([^)]*\).*$', '', text)
+    return result.strip()
+
+
+def clean_pinyin_from_sentence(sentence: str) -> str:
+    """Remove pinyin in parentheses from Chinese sentences.
+    
+    Handles patterns like:
+    - 这是我第一次来中国。(Zhè shì wǒ dì yī cì lái Zhōngguó.)
+    - 他是班上第一名。(Tā shì bān shàng dì yī míng.)
+    
+    Returns sentence without pinyin.
+    """
+    if not sentence:
+        return ""
+    # Remove pinyin in parentheses (contains lowercase letters and tone marks)
+    result = re.sub(r'\s*\([A-Za-zāáǎàēéěèīíǐìōóǒòūúǔùǖǘǚǜ\s]+\.\)', '', sentence)
+    result = re.sub(r'\s*\([A-Za-zāáǎàēéěèīíǐìōóǒòūúǔùǖǘǚǜ\s]+\)', '', result)
+    return result.strip()
 
 
 def oculta_objetivo_en_texto(texto: str, objetivo: str) -> str:
@@ -139,13 +174,72 @@ def lookup_length(length_code: str) -> str:
     return length_map.get(length_code, f"{length_code} caracteres")
 
 
-def build_hints(row: Dict[str, str], hanzi: str, pinyin: str) -> Dict[str, str]:
-    """Build hints in 3 phases for progressive revelation."""
+def extract_definition_only(definition: str, hanzi: str, pinyin: str) -> str:
+    """Extract only the Spanish translation from definition, removing hanzi and pinyin."""
+    if not definition:
+        return ""
+    
+    result = definition
+    
+    # Pattern 1: Remove 'hanzi' (pinyin) or "hanzi" (pinyin) or hanzi (pinyin)
+    # Match any quotes around hanzi and pinyin in parentheses
+    result = re.sub(r"[''\"]*" + re.escape(hanzi) + r"[''\"]*\s*\([^)]*\)", "", result)
+    
+    # Pattern 2: Remove just (pinyin) - match pinyin with spaces and tone marks
+    # Create a flexible pattern for pinyin (handles spaces, tones, etc.)
+    pinyin_pattern = pinyin.replace(' ', r'\s*')
+    result = re.sub(r'\s*\([^)]*' + re.escape(pinyin_pattern) + r'[^)]*\)', '', result, flags=re.IGNORECASE)
+    
+    # Pattern 3: Remove standalone pinyin in parentheses (catch any remaining)
+    # Match common pinyin patterns: lowercase letters with optional tone marks and spaces
+    result = re.sub(r'\s*\([a-zāáǎàēéěèīíǐìōóǒòūúǔùǖǘǚǜ\s]+\)', '', result, flags=re.IGNORECASE)
+    
+    # Pattern 4: Remove hanzi in quotes at the beginning or anywhere
+    result = re.sub(r"[''\"]*" + re.escape(hanzi) + r"[''\"]*", "___", result)
+    
+    # Pattern 5: Remove standalone hanzi
+    result = result.replace(hanzi, "___")
+    
+    # Clean up: remove leading "La palabra", "El verbo", etc. if present
+    result = re.sub(r'^(La palabra|El verbo|El sustantivo|La expresión)\s+___\s*', '', result, flags=re.IGNORECASE)
+    result = re.sub(r'^(La palabra|El verbo|El sustantivo|La expresión)\s+', '', result, flags=re.IGNORECASE)
+    
+    # Clean up extra spaces, punctuation, and leading/trailing whitespace
+    result = re.sub(r'\s+', ' ', result).strip()
+    result = re.sub(r'^[,\s\-]+', '', result)
+    
+    # Remove awkward leading phrases like "Un es" or "Una es"
+    result = re.sub(r'^(Un|Una)\s+(es|significa|se\s+refiere)\s+', r'\2 ', result, flags=re.IGNORECASE)
+    
+    # Fix leading "se" or "es" phrases
+    result = re.sub(r'^(se\s+refiere|se\s+utiliza|se\s+traduce|es\s+una?)\s+', lambda m: m.group(1).capitalize() + ' ', result, flags=re.IGNORECASE)
+    
+    # Capitalize first letter
+    if result:
+        result = result[0].upper() + result[1:] if len(result) > 1 else result.upper()
+    
+    return result
+
+
+def build_hints(row: Dict[str, str], hanzi: str, pinyin: str, include_definition: bool = False, hide_word_in_collocation: bool = True) -> Dict[str, str]:
+    """Build hints in 3-4 phases for progressive revelation.
+    
+    Args:
+        row: CSV row data
+        hanzi: Target word in Chinese characters
+        pinyin: Pinyin pronunciation
+        include_definition: If True, adds hint4 with definition (for PatternCard)
+        hide_word_in_collocation: If False, shows full collocation without hiding word (for SentenceCard)
+    
+    Returns:
+        Dictionary with hint1, hint2, hint3, and optionally hint4
+    """
     pos = row.get("pos", "").strip()
     register = row.get("register", "").strip()
     collocations = row.get("collocations", "").strip()
     longitud = row.get("longitud", "").strip()
     frecuencia = row.get("frecuencia", "").strip()
+    definition = row.get("definition", "").strip()
 
     # Phase 1: Basic info
     phase1 = []
@@ -159,13 +253,16 @@ def build_hints(row: Dict[str, str], hanzi: str, pinyin: str) -> Dict[str, str]:
         freq_readable = lookup_frequency(frecuencia)
         phase1.append(f"Nivel: {freq_readable}")
 
-    # Phase 2: Collocation hint
+    # Phase 2: Collocation hint (use longest for more context)
     phase2 = ""
     if collocations:
-        colloc_first = first_piece(collocations)
-        colloc_hint = oculta_objetivo_en_texto(colloc_first, hanzi)
+        colloc_longest = longest_piece(collocations)
+        if hide_word_in_collocation:
+            colloc_hint = oculta_objetivo_en_texto(colloc_longest, hanzi)
+        else:
+            colloc_hint = colloc_longest
         colloc_hint = remove_parentheses(colloc_hint)
-        if colloc_hint:
+        if colloc_hint and colloc_hint != "___":  # Avoid showing only blanks
             phase2 = f"Colocación: {colloc_hint}"
 
     # Phase 3: Pinyin and length
@@ -177,8 +274,15 @@ def build_hints(row: Dict[str, str], hanzi: str, pinyin: str) -> Dict[str, str]:
         longitud_readable = lookup_length(longitud)
         phase3.append(longitud_readable)
 
-    return {
+    hints = {
         "hint1": " | ".join(phase1) if phase1 else "",
         "hint2": phase2,
         "hint3": " | ".join(phase3) if phase3 else ""
     }
+    
+    # Phase 4: Definition without hanzi and pinyin (only for PatternCard)
+    if include_definition and definition:
+        clean_definition = extract_definition_only(definition, hanzi, pinyin)
+        hints["hint4"] = clean_definition if clean_definition else ""
+    
+    return hints

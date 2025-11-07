@@ -1,0 +1,335 @@
+[
+  {
+    "simplified": "几",
+    "radical": "几",
+    "level": [
+      "new-1",
+      "old-1"
+    ],
+    "frequency": 178,
+    "pos": [
+      "m",
+      "d"
+    ],
+    "forms": [
+      {
+        "traditional": "几",
+        "transcriptions": {
+          "pinyin": "jī",
+          "numeric": "ji1",
+          "wadegiles": "chi¹",
+          "bopomofo": "ㄐㄧ",
+          "romatzyh": "ji"
+        },
+        "meanings": [
+          "small table"
+        ],
+        "classifiers": []
+      },
+      {
+        "traditional": "幾",
+        "transcriptions": {
+          "pinyin": "jī",
+          "numeric": "ji1",
+          "wadegiles": "chi¹",
+          "bopomofo": "ㄐㄧ",
+          "romatzyh": "ji"
+        },
+        "meanings": [
+          "almost"
+        ],
+        "classifiers": []
+      },
+      {
+        "traditional": "幾",
+        "transcriptions": {
+          "pinyin": "jǐ",
+          "numeric": "ji3",
+          "wadegiles": "chi³",
+          "bopomofo": "ㄐㄧˇ",
+          "romatzyh": "jii"
+        },
+        "meanings": [
+          "how much",
+          "how many",
+          "several",
+          "a few"
+        ],
+        "classifiers": []
+      }
+    ]
+  },
+  {
+    "simplified": "炉子",
+    "radical": "火",
+    "level": [
+      "new-7+"
+    ],
+    "frequency": 16127,
+    "pos": [
+      "n"
+    ],
+    "forms": [
+      {
+        "traditional": "爐子",
+        "transcriptions": {
+          "pinyin": "lú zi",
+          "numeric": "lu2 zi5",
+          "wadegiles": "lu² zi",
+          "bopomofo": "ㄌㄨˊ zi",
+          "romatzyh": "lu zi"
+        },
+        "meanings": [
+          "stove",
+          "oven",
+          "furnace"
+        ],
+        "classifiers": []
+      }
+    ]
+  },
+  {
+    "simplified": "星期",
+    "radical": "日",
+    "level": [
+      "new-1",
+      "old-1"
+    ],
+    "frequency": 1956,
+    "pos": [
+      "n"
+    ],
+    "forms": [
+      {
+        "traditional": "星期",
+        "transcriptions": {
+          "pinyin": "xīng qī",
+          "numeric": "xing1 qi1",
+          "wadegiles": "hsing¹ ch'i¹",
+          "bopomofo": "ㄒㄧㄥ ㄑㄧ",
+          "romatzyh": "shing chi"
+        },
+        "meanings": [
+          "week",
+          "day of the week",
+          "Sunday"
+        ],
+        "classifiers": [
+          "个"
+        ]
+      }
+    ]
+  },
+  {
+    "simplified": "树立",
+    "radical": "木",
+    "level": [
+      "new-7+",
+      "old-6"
+    ],
+    "frequency": 6735,
+    "pos": [
+      "v"
+    ],
+    "forms": [
+      {
+        "traditional": "樹立",
+        "transcriptions": {
+          "pinyin": "shù lì",
+          "numeric": "shu4 li4",
+          "wadegiles": "shu⁴ li⁴",
+          "bopomofo": "ㄕㄨˋ ㄌㄧˋ",
+          "romatzyh": "shuh lih"
+        },
+        "meanings": [
+          "to set up",
+          "to establish"
+        ],
+        "classifiers": []
+      }
+    ]
+  },
+  {
+    "simplified": "补",
+    "radical": "衤",
+    "level": [
+      "new-3"
+    ],
+    "frequency": 2850,
+    "pos": [
+      "v"
+    ],
+    "forms": [
+      {
+        "traditional": "補",
+        "transcriptions": {
+          "pinyin": "bǔ",
+          "numeric": "bu3",
+          "wadegiles": "pu³",
+          "bopomofo": "ㄅㄨˇ",
+          "romatzyh": "buu"
+        },
+        "meanings": [
+          "to repair",
+          "to patch",
+          "to mend",
+          "to make up for",
+          "to fill (a vacancy)",
+          "to supplement"
+        ],
+        "classifiers": []
+      }
+    ]
+  },
+  {
+    "simplified": "构造",
+    "radical": "木",
+    "level": [
+      "new-4"
+    ],
+    "frequency": 9731,
+    "pos": [
+      "n",
+      "v",
+      "vn"
+    ],
+    "forms": [
+      {
+        "traditional": "構造",
+        "transcriptions": {
+          "pinyin": "gòu zào",
+          "numeric": "gou4 zao4",
+          "wadegiles": "kou⁴ tsao⁴",
+          "bopomofo": "ㄍㄡˋ ㄗㄠˋ",
+          "romatzyh": "gow tzaw"
+        },
+        "meanings": [
+          "structure",
+          "composition",
+          "tectonic (geology)"
+        ],
+        "classifiers": [
+          "个"
+        ]
+      }
+    ]
+  },
+  {
+    "simplified": "作家",
+    "radical": "亻",
+    "level": [
+      "new-2"
+    ],
+    "frequency": 3034,
+    "pos": [
+      "n"
+    ],
+    "forms": [
+      {
+        "traditional": "作家",
+        "transcriptions": {
+          "pinyin": "zuò jiā",
+          "numeric": "zuo4 jia1",
+          "wadegiles": "tso⁴ chia¹",
+          "bopomofo": "ㄗㄨㄛˋ ㄐㄧㄚ",
+          "romatzyh": "tzuoh jia"
+        },
+        "meanings": [
+          "author"
+        ],
+        "classifiers": [
+          "个",
+          "位"
+        ]
+      }
+    ]
+  },
+  {
+    "simplified": "戒指",
+    "radical": "戈",
+    "level": [
+      "new-7+",
+      "old-5"
+    ],
+    "frequency": 4707,
+    "pos": [
+      "n"
+    ],
+    "forms": [
+      {
+        "traditional": "戒指",
+        "transcriptions": {
+          "pinyin": "jiè zhi",
+          "numeric": "jie4 zhi5",
+          "wadegiles": "chieh⁴ zhi",
+          "bopomofo": "ㄐㄧㄝˋ zhi",
+          "romatzyh": "jieh zhi"
+        },
+        "meanings": [
+          "(finger) ring"
+        ],
+        "classifiers": []
+      }
+    ]
+  },
+  {
+    "simplified": "标点",
+    "radical": "木",
+    "level": [
+      "old-5"
+    ],
+    "frequency": 36947,
+    "pos": [
+      "n"
+    ],
+    "forms": [
+      {
+        "traditional": "標點",
+        "transcriptions": {
+          "pinyin": "biāo diǎn",
+          "numeric": "biao1 dian3",
+          "wadegiles": "piao¹ tien³",
+          "bopomofo": "ㄅㄧㄠ ㄉㄧㄢˇ",
+          "romatzyh": "biau dean"
+        },
+        "meanings": [
+          "punctuation",
+          "a punctuation mark",
+          "to punctuate"
+        ],
+        "classifiers": [
+          "个"
+        ]
+      }
+    ]
+  },
+  {
+    "simplified": "第一",
+    "radical": "⺮",
+    "level": [
+      "old-2"
+    ],
+    "frequency": 223,
+    "pos": [
+      "m"
+    ],
+    "forms": [
+      {
+        "traditional": "第一",
+        "transcriptions": {
+          "pinyin": "dì yī",
+          "numeric": "di4 yi1",
+          "wadegiles": "ti⁴ i¹",
+          "bopomofo": "ㄉㄧˋ ㄧ",
+          "romatzyh": "dih i"
+        },
+        "meanings": [
+          "first",
+          "number one",
+          "primary"
+        ],
+        "classifiers": []
+      }
+    ]
+  }
+]

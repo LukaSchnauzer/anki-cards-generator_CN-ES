@@ -96,37 +96,54 @@ Genera archivos de audio para las oraciones en chino usando Text-to-Speech.
 
 **Comando:**
 ```bash
-# Google TTS (recomendado - rápido y confiable)
+# Google TTS (rápido, gratis, sin configuración)
 python main.py audio --engine gtts --csv outputs/vocab.csv
 
-# Microsoft Edge TTS (alta calidad)
-python main.py audio --engine edge --csv outputs/vocab.csv
-
-# Ambos motores
-python main.py audio --engine both --csv outputs/vocab.csv
+# Azure TTS (alta calidad, voces variadas, requiere API key)
+python main.py audio --engine azure --csv outputs/vocab.csv
 ```
 
 **Opciones:**
 - `--engine`: Motor TTS a usar
-  - `gtts` - Google TTS (default, rápido)
-  - `edge` - Microsoft Edge TTS (alta calidad)
-  - `both` - Generar con ambos motores
+  - `gtts` - Google TTS (default, sin configuración, gratis)
+  - `azure` - Azure TTS (requiere API key, alta calidad, voces variadas)
 - `--csv`: Archivo CSV a procesar (requerido)
+
+**🔑 Configuración de Azure TTS:**
+Para usar `--engine azure`, necesitas configurar Azure TTS:
+1. Crea cuenta gratuita en [Azure Portal](https://portal.azure.com)
+2. Crea recurso "Speech Services" (tier gratuito: 500K caracteres/mes)
+3. Agrega tu API key al archivo `.env`:
+   ```env
+   AZURE_TTS_KEY=tu_key_aqui
+```
+   AZURE_TTS_REGION=eastus
+   ```
+4. Ver guía completa: [docs/AZURE_TTS_SETUP.md](docs/AZURE_TTS_SETUP.md)
 
 **⚠️ Nota Importante:** El parámetro `--csv` es obligatorio. Debes especificar qué archivo CSV procesar.
 
 **Ejemplos:**
 ```bash
-# Generar audio para todas las oraciones en el CSV
+# Generar audio con Google TTS (rápido, sin configuración)
 python main.py audio --engine gtts --csv outputs/hsk.csv
 
-# Usar Edge TTS para mejor calidad
-python main.py audio --engine edge --csv outputs/vocab.csv
+# Generar audio con Azure TTS (mejor calidad, voces variadas)
+python main.py audio --engine azure --csv outputs/vocab.csv
 ```
 
-**⏱️ Tiempo**: Usualmente toma **5-15 minutos** para 100 entradas (3 archivos de audio por entrada).
+**⏱️ Tiempo**: Usualmente toma **5-15 minutos** para 100 entradas (4 archivos de audio por entrada: 1 palabra + 3 frases).
 
-**Salida**: Archivos MP3 de audio en el directorio `resources/audios/` con nombres basados en hash.
+**📊 Progress Tracking**: El script muestra progreso en tiempo real con:
+- Porcentaje completado
+- Tiempo transcurrido
+- Tiempo estimado restante (ETA)
+- Velocidad de procesamiento
+- Resumen final con estadísticas
+
+**Salida**: Archivos MP3 de audio en el directorio `resources/audios/`:
+- `word_{hanzi}_{hash}.mp3` - Audio de la palabra sola
+- `{sentence}_{hash}.mp3` - Audio de frases de ejemplo
 
 ---
 
@@ -212,8 +229,10 @@ ChinoSRS/
 │   │   └── hints.py           # Lógica de generación de pistas
 │   │
 │   ├── audio/                  # Scripts de generación de audio
-│   │   ├── generate_audio.py       # Edge-TTS
-│   │   └── generate_audio_gtts.py  # Google TTS
+│   │   ├── generate_audio.py   # 🎯 Script principal TTS
+│   │   └── engines/            # Motores TTS modulares
+│   │       ├── gtts_engine.py  # Google TTS
+│   │       └── azure_engine.py # Azure TTS (Microsoft)
 │   │
 │   ├── templates/              # Plantillas HTML de tarjetas
 │   │   ├── sentence_card_front.html
