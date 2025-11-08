@@ -23,6 +23,7 @@ def create_model_sentence(force_recreate: bool = False):
     fields = [
         "SortKey", "Hanzi", "Pinyin", "Meaning", "SentenceCN", "SentenceES",
         "Tips", "Collocations", "POS", "Register", "Frecuencia", "Tags", "Audio", "WordAudio",
+        "AudioFilename", "WordAudioFilename",
         "FrontLine", "Hint1", "Hint2", "Hint3"
     ]
     
@@ -47,6 +48,7 @@ def create_model_pattern(force_recreate: bool = False):
     fields = [
         "SortKey", "Hanzi", "Pinyin", "Meaning", "SentenceCN", "SentenceES", "Tips", "Pattern",
         "POS", "Register", "Frecuencia", "Audio", "WordAudio", "Tags",
+        "AudioFilename", "WordAudioFilename",
         "ClozeSentence", "MissingPart", "Hint1", "Hint2", "Hint3", "Hint4"
     ]
     
@@ -71,6 +73,7 @@ def create_model_audio(force_recreate: bool = False):
     fields = [
         "SortKey", "Hanzi", "Pinyin", "Meaning", "SentenceCN", "SentenceES", "Tips",
         "POS", "Register", "Frecuencia", "Tags", "Audio", "WordAudio",
+        "AudioFilename", "WordAudioFilename",
         "Hint1", "Hint2", "Hint3", "Hint4"
     ]
     
