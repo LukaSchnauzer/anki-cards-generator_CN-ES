@@ -41,7 +41,8 @@ SYSTEM_PROMPT = (
     "}\n"
     "Requisitos:\n"
     "- \"definition\": breve, clara y natural; NO copies textos en inglés; explica como a un alumno hispanohablante.\n"
-    "- 3 oraciones en chino naturales que usen la palabra tal cual; 3 traducciones fluidas en español.\n"
+    "- \"example_sentence\": array de 3 oraciones SOLO en caracteres chinos (hanzi). NO incluyas pinyin, NO incluyas traducción. Solo hanzi.\n"
+    "- \"example_translation\": array de 3 traducciones en español, correspondientes a las 3 oraciones anteriores.\n"
     "- \"tips\": notas de uso, matices y construcciones comunes.\n"
     "- \"collocations\": combinaciones frecuentes (3–5), en chino, con glosa española entre paréntesis.\n"
     "- Si no aplica ninguna etiqueta gramatical, deja \"tags_seed\": \"\".\n"
@@ -117,13 +118,26 @@ def read_entries(input_path):
 
 
 def openai_generate(api_key, model, hanzi, pinyin, pos, meanings):
+    # Create user message with example format
+    user_content = (
+        f"Genera contenido para:\n"
+        f"hanzi: {hanzi}\n"
+        f"pinyin: {pinyin}\n"
+        f"pos: {pos}\n"
+        f"meanings: {meanings}\n\n"
+        f"IMPORTANTE: example_sentence debe ser un array de 3 strings, cada uno SOLO con caracteres chinos.\n"
+        f"Ejemplo correcto:\n"
+        f'"example_sentence": ["这件首饰非常贵重。", "他把贵重的文件放在保险箱里。", "这幅画是一个贵重的艺术品。"]\n'
+        f'"example_translation": ["Esta joya es muy valiosa.", "Él guardó los documentos valiosos en la caja fuerte.", "Esta pintura es una obra de arte valiosa."]'
+    )
+    
     body = {
         "model": model,
         "temperature": 0.2,
         "response_format": {"type": "json_object"},
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": json.dumps({"hanzi": hanzi, "pinyin": pinyin, "pos": pos, "meanings": meanings}, ensure_ascii=False)},
+            {"role": "user", "content": user_content},
         ],
     }
     headers = {"Authorization": f"Bearer {api_key}"}

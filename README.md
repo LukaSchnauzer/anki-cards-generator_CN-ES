@@ -25,16 +25,19 @@ python main.py vocab --input data/complete.json --output outputs/vocab.csv
 # 2. Validar calidad del CSV generado
 python main.py validate-csv --csv outputs/vocab.csv
 
-# 3. Validar cobertura (opcional)
+# 3. Normalizar pinyin (si es necesario)
+python main.py normalize-pinyin --input outputs/vocab.csv --output outputs/vocab.csv
+
+# 4. Validar cobertura (opcional)
 python main.py validate-coverage --json data/complete.json --csv outputs/vocab.csv
 
-# 4. Generar archivos de audio
+# 5. Generar archivos de audio
 python main.py audio --engine gtts --csv outputs/vocab.csv
 
-# 5. Validar archivos de audio
+# 6. Validar archivos de audio
 python main.py validate-audio --csv outputs/vocab.csv
 
-# 6. Crear mazo de Anki
+# 7. Crear mazo de Anki
 python main.py anki --csv outputs/vocab.csv --limit 10
 ```
 
@@ -47,9 +50,9 @@ python main.py anki --csv outputs/vocab.csv --limit 10
 Sigue estos pasos en orden para mejores resultados:
 
 ```
-1. Generar CSV  →  2. Validar CSV  →  3. Validar      →  4. Generar  →  5. Validar  →  6. Crear Mazo
-   (Enriquec.)      (Calidad)          Cobertura         Audio         Audio         (Tarjetas)
-                                        (Opcional)        (TTS)         (Archivos)
+1. Generar  →  2. Validar  →  3. Normalizar  →  4. Validar    →  5. Generar  →  6. Validar  →  7. Crear
+   CSV           CSV           Pinyin           Cobertura       Audio         Audio         Mazo
+   (Enriquec.)   (Calidad)     (Opcional)       (Opcional)      (TTS)         (Archivos)    (Tarjetas)
 ```
 
 ---
@@ -206,6 +209,8 @@ python main.py validate-csv --csv outputs/vocab.csv
 **Opciones:**
 - `--csv`: Archivo CSV a validar (requerido)
 - `--errors-only`: Mostrar solo errores críticos (ocultar warnings)
+- `--export-clean`: Exportar CSV limpio sin filas problemáticas
+- `--remove-severity`: Qué filas remover: `errors` (solo errores) o `all` (errores + warnings). Default: `errors`
 
 **Validaciones incluidas:**
 - ✅ Campos requeridos presentes y no vacíos
@@ -225,6 +230,15 @@ python main.py validate-csv --csv outputs/hsk_vocab_full.csv
 
 # Ver solo errores críticos
 python main.py validate-csv --csv outputs/vocab.csv --errors-only
+
+# Exportar CSV limpio (remover solo errores)
+python main.py validate-csv --csv outputs/vocab.csv \
+  --export-clean outputs/vocab_clean.csv
+
+# Remover todas las filas con problemas (errores + warnings)
+python main.py validate-csv --csv outputs/vocab.csv \
+  --export-clean outputs/vocab_clean.csv \
+  --remove-severity all
 ```
 
 **Salida de ejemplo:**
@@ -242,11 +256,105 @@ ISSUES FOUND:
 [ERROR] Row 145 (测试) - example_sentence: '测试' no aparece en ninguna oracion
 [WARN] Row 267 (词汇) - example_sentence[2]: Posible pinyin fuera de parentesis (no sera limpiado)
 [WARN] Row 389 (汉字) - collocations: Esperadas 3-5 colocaciones, encontradas 2
+
+ℹ️  Removing rows with ERRORS only (5 rows)
+
+✅ Exported 995 clean rows to: outputs/vocab_clean.csv
+   Removed 5 problematic rows
 ```
+
+**Flujo de trabajo recomendado:**
+1. Validar CSV y exportar versión limpia
+2. Usar CSV limpio para generar audio y tarjetas
+3. Usar `validate-coverage` para identificar entradas faltantes
+4. Re-procesar entradas faltantes con `vocab`
 
 ---
 
-### Paso 5: Validar Cobertura JSON vs CSV ✓
+### Paso 5: Normalizar Pinyin en CSV 🔧
+
+Normaliza diferentes formatos de pinyin a formato estándar con diacríticos.
+
+**Comando:**
+```bash
+python main.py normalize-pinyin --input outputs/vocab.csv --output outputs/vocab_normalized.csv
+```
+
+**Opciones:**
+- `--input`: Archivo CSV de entrada (requerido)
+- `--output`: Archivo CSV de salida (requerido)
+- `--dry-run`: Mostrar cambios sin escribir archivo de salida
+
+**Formatos soportados:**
+- ✅ `lu:3 xing2` → `lǔ xíng` (formato con dos puntos)
+- ✅ `lu:4` → `lù` (dos puntos + número)
+- ✅ `mei2fa3r5` → `méi fǎ r` (sílabas pegadas)
+- ✅ `ni3hao3` → `nǐ hǎo` (números sin espacios)
+- ✅ `lv3` → `lǚ` (v → ü)
+- ✅ `ju1`, `qu2`, `xu3`, `yu4` → `jǖ`, `qǘ`, `xǚ`, `yǜ` (conversión automática ü)
+- ✅ `r5`, `zi5` → `r`, `zi` (tono neutral eliminado)
+- ✅ `tān wánr5` → `tān wánr` (diacríticos + número mixto)
+- ✅ `hútòngr5` → `hútòngr` (formato mixto con tono neutral)
+
+**Ejemplos:**
+```bash
+# Ver cambios sin modificar archivo (dry-run)
+python main.py normalize-pinyin \
+  --input outputs/vocab_retry.csv \
+  --output outputs/vocab_normalized.csv \
+  --dry-run
+
+# Normalizar y guardar
+python main.py normalize-pinyin \
+  --input outputs/vocab_retry.csv \
+  --output outputs/vocab_normalized.csv
+
+# Normalizar in-place (mismo archivo)
+python main.py normalize-pinyin \
+  --input outputs/vocab.csv \
+  --output outputs/vocab.csv
+```
+
+**Salida de ejemplo:**
+```
+Reading CSV: outputs/vocab_retry.csv
+
+================================================================================
+NORMALIZATION RESULTS
+================================================================================
+Total rows:     150
+Rows changed:   45
+Rows unchanged: 105
+================================================================================
+
+CHANGES DETECTED:
+--------------------------------------------------------------------------------
+  Row 2 (履行)
+    Before: lu:3 xing2
+    After:  lǔ xíng
+  
+  Row 15 (绿)
+    Before: lu:4
+    After:  lù
+  
+  Row 23 (没法儿)
+    Before: mei2fa3r5
+    After:  méi fǎ r
+  
+  ... and 42 more changes
+
+✅ Normalized CSV written to: outputs/vocab_normalized.csv
+```
+
+**Reglas de normalización:**
+1. **Colocación de marcas tonales**: `a` o `e` tienen prioridad, en `ou` la `o` lleva la marca, de lo contrario la última vocal
+2. **Conversión automática ü**: `ju`, `qu`, `xu`, `yu` siempre se convierten a `jü`, `qü`, `xü`, `yü`
+3. **Tono neutral**: Tono 5 se elimina (轻声)
+4. **Preservación**: Mayúsculas iniciales y espacios se mantienen
+
+---
+
+### Paso 6: Validar Cobertura JSON vs CSV ✓
 
 Verifica qué entradas del JSON original fueron generadas exitosamente en el CSV.
 
@@ -423,7 +531,8 @@ ChinoSRS/
 │       ├── dump_deck.py       # Herramienta de exportación de mazo
 │       ├── validate_csv.py    # ✓ Validación de calidad de CSV
 │       ├── validate_audio.py  # ✓ Validación de archivos de audio
-│       └── validate_coverage.py # ✓ Validación de cobertura JSON vs CSV
+│       ├── validate_coverage.py # ✓ Validación de cobertura JSON vs CSV
+│       └── normalize_pinyin_csv.py # 🔧 Normalización de formatos de pinyin
 │
 ├── outputs/                    # Archivos CSV generados
 └── resources/
@@ -711,6 +820,28 @@ python main.py validate-csv --csv outputs/vocab.csv
 
 # Ver solo errores críticos
 python main.py validate-csv --csv outputs/vocab.csv --errors-only
+```
+
+### Normalización de Pinyin (normalize-pinyin)
+
+Normaliza diferentes formatos de pinyin a formato estándar con diacríticos:
+
+**Formatos soportados:**
+- ✅ `lu:3 xing2` → `lǔ xíng` (formato con dos puntos)
+- ✅ `mei2fa3r5` → `méi fǎ r` (sílabas pegadas)
+- ✅ `ni3hao3` → `nǐ hǎo` (números sin espacios)
+- ✅ `lv3` → `lǚ` (v → ü automático)
+- ✅ `ju1`, `qu2`, `xu3`, `yu4` → conversión automática a ü
+- ✅ `tān wánr5` → `tān wánr` (diacríticos + número mixto)
+- ✅ Tono neutral (5) eliminado
+
+**Uso recomendado:**
+```bash
+# Ver cambios sin modificar (dry-run)
+python main.py normalize-pinyin --input outputs/vocab.csv --output outputs/vocab_normalized.csv --dry-run
+
+# Aplicar normalización
+python main.py normalize-pinyin --input outputs/vocab.csv --output outputs/vocab.csv
 ```
 
 ### Validación de Archivos de Audio (validate-audio)

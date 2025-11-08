@@ -25,10 +25,29 @@ def post(action: str, **params):
             resp_data = resp.read()
             data = json.loads(resp_data.decode("utf-8"))
             if data.get("error") is not None:
+                # For addNotes, duplicates are returned in the result array, not as errors
+                # Only raise if it's a real error, not a duplicate warning
+                error_msg = str(data['error'])
+                if action == "addNotes" and "duplicate" in error_msg.lower():
+                    # Return the result anyway, it will contain None for duplicates
+                    return data.get("result")
                 raise RuntimeError(f"AnkiConnect error in {action}: {data['error']}")
-            return data.get("result")
+            
+            result = data.get("result")
+            # If result is None for addNotes, include the full response for debugging
+            if result is None and action == "addNotes":
+                raise RuntimeError(f"AnkiConnect returned None for {action}. Full response: {json.dumps(data, indent=2)}")
+            
+            return result
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode('utf-8') if hasattr(e, 'read') else str(e)
+        raise RuntimeError(f"HTTP {e.code} error calling AnkiConnect at {ANKI_CONNECT_URL} for action {action}: {error_body}")
+    except urllib.error.URLError as e:
+        raise RuntimeError(f"Connection error calling AnkiConnect at {ANKI_CONNECT_URL} for action {action}: {e.reason}")
     except Exception as e:
-        raise RuntimeError(f"HTTP error calling AnkiConnect at {ANKI_CONNECT_URL} for action {action}: {e}")
+        if isinstance(e, RuntimeError):
+            raise
+        raise RuntimeError(f"Unexpected error calling AnkiConnect at {ANKI_CONNECT_URL} for action {action}: {type(e).__name__}: {e}")
 
 
 def ensure_deck(deck_name: str):

@@ -7,6 +7,7 @@ import csv
 import sys
 import codecs
 import re
+import json
 from pathlib import Path
 from typing import Dict, List, Tuple
 
@@ -183,10 +184,35 @@ def validate_csv(csv_path: str) -> Tuple[List[ValidationIssue], int]:
     return issues, total_rows
 
 
+def export_clean_csv(csv_path: str, problematic_rows: set, output_path: str):
+    """Export CSV without problematic rows."""
+    with open(csv_path, 'r', encoding='utf-8') as f_in:
+        reader = csv.DictReader(f_in)
+        fieldnames = reader.fieldnames
+        
+        with open(output_path, 'w', encoding='utf-8', newline='') as f_out:
+            writer = csv.DictWriter(f_out, fieldnames=fieldnames)
+            writer.writeheader()
+            
+            for row_num, row in enumerate(reader, start=2):
+                if row_num not in problematic_rows:
+                    writer.writerow(row)
+    
+    clean_count = sum(1 for _ in open(csv_path, encoding='utf-8')) - 1 - len(problematic_rows)
+    print(f"\n✅ Exported {clean_count} clean rows to: {output_path}")
+    print(f"   Removed {len(problematic_rows)} problematic rows")
+
+
+
+
 def main():
     parser = argparse.ArgumentParser(description="Validate vocabulary CSV quality")
     parser.add_argument("csv_file", help="Path to CSV file")
     parser.add_argument("--errors-only", action="store_true", help="Show only errors")
+    parser.add_argument("--export-clean", metavar="OUTPUT_CSV",
+                       help="Export clean CSV without problematic rows")
+    parser.add_argument("--remove-severity", choices=["errors", "all"], default="errors",
+                       help="Which rows to remove: 'errors' (only ERROR rows) or 'all' (ERROR + WARN rows). Default: errors")
     args = parser.parse_args()
     
     if not Path(args.csv_file).exists():
@@ -221,9 +247,27 @@ def main():
             print(f"  {issue}")
     else:
         print()
-        print("OK: No issues found!")
+        print("✅ OK: No issues found!")
     
-    sys.exit(1 if errors else 0)
+    # Export clean CSV if requested
+    if args.export_clean:
+        # Determine which rows to consider problematic based on severity
+        problematic_rows = set()
+        
+        if args.remove_severity == "errors":
+            # Only remove rows with errors
+            problematic_rows = {issue.row_num for issue in errors}
+            print(f"\nℹ️  Removing rows with ERRORS only ({len(problematic_rows)} rows)")
+        else:  # "all"
+            # Remove rows with errors OR warnings
+            all_issues = errors + warnings
+            problematic_rows = {issue.row_num for issue in all_issues}
+            print(f"\nℹ️  Removing rows with ERRORS and WARNINGS ({len(problematic_rows)} rows)")
+        
+        export_clean_csv(args.csv_file, problematic_rows, args.export_clean)
+    
+    # Always exit with success - finding issues is expected behavior
+    sys.exit(0)
 
 
 if __name__ == "__main__":

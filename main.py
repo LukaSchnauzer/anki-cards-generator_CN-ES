@@ -141,6 +141,9 @@ def workflow_create_anki_deck(args):
         cmd.extend(["--limit", str(args.limit)])
     if args.force_recreate:
         cmd.append("--force-recreate")
+    if args.only_deduplicated:
+        cmd.append("--only-deduplicated")
+        print_info("Mode: Only uploading deduplicated notes")
     
     return run_command(cmd, "Anki deck creation")
 
@@ -178,6 +181,12 @@ def workflow_validate_csv(args):
     if args.errors_only:
         cmd.append("--errors-only")
     
+    if args.export_clean:
+        cmd.extend(["--export-clean", args.export_clean])
+    
+    if args.remove_severity:
+        cmd.extend(["--remove-severity", args.remove_severity])
+    
     return run_command(cmd, "CSV quality validation")
 
 
@@ -208,8 +217,33 @@ def workflow_validate_audio(args):
     return run_command(cmd, "Audio files validation")
 
 
+def workflow_normalize_pinyin(args):
+    """Workflow 7: Normalize pinyin in CSV."""
+    print_header("✓ Normalize Pinyin")
+    
+    if not args.input:
+        print_error("Input CSV file is required. Use --input <path>")
+        return False
+    
+    if not args.output:
+        print_error("Output CSV file is required. Use --output <path>")
+        return False
+    
+    if not os.path.exists(args.input):
+        print_error(f"Input CSV file not found: {args.input}")
+        return False
+    
+    python_cmd = get_python_cmd()
+    cmd = [python_cmd, "src/utils/normalize_pinyin_csv.py", args.input, args.output]
+    
+    if args.dry_run:
+        cmd.append("--dry-run")
+    
+    return run_command(cmd, "Pinyin normalization")
+
+
 def workflow_validate_coverage(args):
-    """Workflow 7: Validate coverage between JSON and CSV."""
+    """Workflow 8: Validate coverage between JSON and CSV."""
     print_header("✓ Validate Coverage")
     
     if not args.json:
@@ -262,14 +296,26 @@ Examples:
   # Create Anki deck
   python main.py anki --csv outputs/vocab.csv --limit 10
   
+  # Create Anki deck (only deduplicated notes)
+  python main.py anki --csv outputs/vocab.csv --only-deduplicated
+  
   # Dump Anki deck
   python main.py dump --deck "Chino SRS" --output deck_backup.json
   
   # Validate CSV quality
   python main.py validate-csv --csv outputs/vocab.csv
   
+  # Validate and export clean CSV (remove only errors)
+  python main.py validate-csv --csv outputs/vocab.csv --export-clean outputs/vocab_clean.csv
+  
+  # Validate and remove all issues (errors + warnings)
+  python main.py validate-csv --csv outputs/vocab.csv --export-clean outputs/vocab_clean.csv --remove-severity all
+  
   # Validate audio files
   python main.py validate-audio --csv outputs/vocab.csv
+  
+  # Normalize pinyin formats in CSV
+  python main.py normalize-pinyin --input outputs/vocab.csv --output outputs/vocab_normalized.csv
   
   # Validate coverage
   python main.py validate-coverage --json resources/complete.json --csv outputs/vocab.csv
@@ -299,6 +345,8 @@ Examples:
     anki_parser.add_argument("--limit", type=int, help="Limit number of entries")
     anki_parser.add_argument("--force-recreate", action="store_true",
                             help="Force recreate card models")
+    anki_parser.add_argument("--only-deduplicated", action="store_true",
+                            help="Only upload notes that were deduplicated (had duplicate SortKeys)")
     
     # Dump deck
     dump_parser = subparsers.add_parser("dump", help="Dump Anki deck contents")
@@ -310,6 +358,10 @@ Examples:
     validate_csv_parser.add_argument("--csv", required=True, help="CSV file to validate")
     validate_csv_parser.add_argument("--errors-only", action="store_true",
                                      help="Show only errors (hide warnings)")
+    validate_csv_parser.add_argument("--export-clean", metavar="OUTPUT_CSV",
+                                     help="Export clean CSV without problematic rows")
+    validate_csv_parser.add_argument("--remove-severity", choices=["errors", "all"], default="errors",
+                                     help="Which rows to remove: 'errors' or 'all' (errors+warnings). Default: errors")
     
     # Validate audio files
     validate_audio_parser = subparsers.add_parser("validate-audio", help="Validate audio files exist")
@@ -320,6 +372,13 @@ Examples:
                                       help="Show list of missing audio files")
     validate_audio_parser.add_argument("--export-missing", metavar="OUTPUT_FILE",
                                       help="Export missing files list to text file")
+    
+    # Normalize pinyin
+    normalize_parser = subparsers.add_parser("normalize-pinyin", help="Normalize pinyin formats in CSV")
+    normalize_parser.add_argument("--input", required=True, help="Input CSV file")
+    normalize_parser.add_argument("--output", required=True, help="Output CSV file")
+    normalize_parser.add_argument("--dry-run", action="store_true",
+                                 help="Show changes without writing output")
     
     # Validate coverage
     validate_cov_parser = subparsers.add_parser("validate-coverage", help="Validate coverage between JSON and CSV")
@@ -358,6 +417,8 @@ Examples:
         success = workflow_validate_csv(args)
     elif args.command == "validate-audio":
         success = workflow_validate_audio(args)
+    elif args.command == "normalize-pinyin":
+        success = workflow_normalize_pinyin(args)
     elif args.command == "validate-coverage":
         success = workflow_validate_coverage(args)
     

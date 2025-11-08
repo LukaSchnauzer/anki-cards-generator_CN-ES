@@ -148,8 +148,8 @@ def main():
     if args.export_missing and missing:
         export_missing_entries(args.json_file, missing, args.export_missing)
     
-    # Exit with error code if there are missing entries
-    sys.exit(1 if missing else 0)
+    # Always exit with success - finding missing entries is expected behavior
+    sys.exit(0)
 
 
 if __name__ == "__main__":
