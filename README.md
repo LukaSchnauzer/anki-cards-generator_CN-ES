@@ -3,7 +3,7 @@
 Un pipeline completo para generar tarjetas Anki de alta calidad para el aprendizaje de vocabulario chino, con enriquecimiento impulsado por IA, generación de audio y plantillas de tarjetas inteligentes.
 
 ## Anki deck pre-generado
-**[ChinoSRS.zip](https://drive.google.com/file/d/14E_m7_5AVk-tg5dfwFrzMBVxnQsZPQpT/view?usp=sharing)** (full con audios, listo para importar en Anki).
+**[ChinoSRS.zip](https://drive.google.com/drive/folders/1lkz8KnAUrw9CWB_63GzVmrl2GoqW4mXw?usp=sharing)** (full con audios, listo para importar en Anki).
 
 ---
 
