@@ -97,3 +97,6 @@ resources/audios/*
 .git/
 .gitmodules
 .gitconfig
+TODO
+TODO.todo
+TASKS.md
