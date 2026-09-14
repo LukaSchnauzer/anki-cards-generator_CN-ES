@@ -1,26 +1,27 @@
-/* ChinoSRS — SentenceCard. Acento: teal (identidad de este tipo de tarjeta). */
+/* ChinoSRS — PatternCard. Acento: ámbar (identidad de este tipo de tarjeta,
+   distinto del teal de SentenceCard). */
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
 
 :root {
-  --paper: #f3f4f1;
+  --paper: #f4f1ea;
   --card: #ffffff;
-  --ink: #20272a;
-  --ink-muted: #5b6a66;
-  --divider: #dadfda;
-  --accent: #1d6e73;
-  --accent-wash: rgba(29, 110, 115, 0.10);
-  --accent-wash-strong: rgba(29, 110, 115, 0.20);
+  --ink: #26221a;
+  --ink-muted: #6b6252;
+  --divider: #e1dbcb;
+  --accent: #a8630f;
+  --accent-wash: rgba(168, 99, 15, 0.10);
+  --accent-wash-strong: rgba(168, 99, 15, 0.20);
 }
 
 .nightMode {
-  --paper: #12181a;
-  --card: #182022;
-  --ink: #e7ecea;
-  --ink-muted: #93a19d;
-  --divider: #263230;
-  --accent: #4fb8be;
-  --accent-wash: rgba(79, 184, 190, 0.14);
-  --accent-wash-strong: rgba(79, 184, 190, 0.26);
+  --paper: #1a1712;
+  --card: #221e17;
+  --ink: #ece6d9;
+  --ink-muted: #a89d87;
+  --divider: #332d22;
+  --accent: #e3a855;
+  --accent-wash: rgba(227, 168, 85, 0.16);
+  --accent-wash-strong: rgba(227, 168, 85, 0.28);
 }
 
 .card {
@@ -96,10 +97,10 @@ button.badge-toggle.on {
 .sentence-zh, .sentence-back {
   font-family: 'Noto Sans SC', sans-serif;
   text-align: center;
-  line-height: 1.6;
+  line-height: 1.7;
 }
 
-.sentence-zh { font-size: 30px; font-weight: 600; }
+.sentence-zh { font-size: 28px; font-weight: 600; }
 .sentence-back { font-size: 21px; font-weight: 600; }
 
 .sentence-zh rt, .sentence-back rt {
@@ -116,6 +117,14 @@ button.badge-toggle.on {
   color: var(--accent);
   border-bottom: 2px solid var(--accent);
   padding: 0 1px;
+}
+
+.blank {
+  display: inline-block;
+  color: var(--accent);
+  font-weight: 700;
+  letter-spacing: -0.05em;
+  padding: 0 2px;
 }
 
 .sb-word {
@@ -163,10 +172,12 @@ button.badge-toggle.on {
   border-radius: 10px;
   padding: 10px 14px;
   font-family: 'Noto Sans SC', sans-serif;
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 600;
   color: var(--ink);
 }
+
+.hint-box.es { font-family: 'IBM Plex Sans', sans-serif; font-size: 14px; font-weight: 500; }
 
 .footline { text-align: center; color: var(--ink-muted); font-size: 13px; }
 
@@ -206,7 +217,7 @@ button.badge-toggle.on {
 .disclose-summary .caret { font-size: 10px; transition: transform 180ms ease; display: inline-block; }
 .disclose-summary.open .caret { transform: rotate(90deg); }
 .disclose-panel { max-height: 0; overflow: hidden; transition: max-height 260ms ease; }
-.disclose-panel.open { max-height: 640px; }
+.disclose-panel.open { max-height: 720px; }
 .disclose-panel-inner { padding-top: 10px; }
 
 .breakdown-table { margin-top: 10px; display: flex; flex-direction: column; gap: 2px; }

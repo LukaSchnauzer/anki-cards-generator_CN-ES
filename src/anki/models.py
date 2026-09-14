@@ -47,18 +47,20 @@ def create_model_pattern(force_recreate: bool = False):
         return
 
     fields = [
-        "SortKey", "Hanzi", "Pinyin", "Meaning", "SentenceCN", "SentenceES", "Tips", "Pattern",
-        "POS", "Register", "Frecuencia", "Audio", "WordAudio", "Tags",
-        "ClozeSentence", "MissingPart", "Hint1", "Hint2", "Hint3", "Hint4"
+        "SortKey", "Hanzi", "HskLevel", "FreqBucket",
+        "PrimaryPinyin", "PrimaryMeaningEs", "PrimaryMeaningZh",
+        "ExampleZh", "ExampleEs",
+        "BreakdownJson", "SecondariesJson", "CollocationsJson",
+        "AudioWordFile", "AudioSentenceFile", "SentenceAlignmentJson",
     ]
-    
+
     templates = [{
         "Name": "ChinoSRS_PatternCard",
         "Front": load_template("pattern_card_front.html"),
         "Back": load_template("pattern_card_back.html")
     }]
-    
-    css = ""
+
+    css = load_template("pattern_card.css")
     post("createModel", modelName=model_name, inOrderFields=fields, cardTemplates=templates, css=css)
 
 

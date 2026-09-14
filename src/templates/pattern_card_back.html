@@ -1,22 +1,188 @@
-<div style="font-family: 'Segoe UI', Arial, sans-serif; padding: 20px; background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); border-radius: 12px; color: white; margin-bottom: 16px; text-align: center;">
-  <div style="font-size: 32px; font-weight: bold; margin-bottom: 8px;">{{MissingPart}}</div>
-  <div style="font-size: 18px; opacity: 0.95;">{{Pinyin}}</div>
-  {{#WordAudio}}<div style="margin-top: 12px;">
-    <audio controls src="{{WordAudio}}" style="max-width: 250px; height: 28px;"></audio>
-  </div>{{/WordAudio}}
-</div>
-<div style="padding: 16px; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-  <div style="margin: 12px 0; padding: 10px; background: #f7fafc; border-radius: 6px; color: #4a5568;">{{SentenceES}}</div>
-  {{#Audio}}<div style="margin: 12px 0; text-align: center; padding: 12px; background: #f0f9ff; border-radius: 6px;">
-    <div style="font-size: 16px; color: #2d3748; margin-bottom: 4px; font-weight: 500;">&#x1F50A; {{SentenceCN}}</div>
-    <div style="color: #718096; font-size: 14px; margin-bottom: 8px;">{{SentenceES}}</div>
-    <audio controls src="{{Audio}}" style="max-width: 300px; height: 32px;"></audio>
-  </div>{{/Audio}}
-  <div style="font-size: 18px; color: #2d3748; margin: 12px 0; font-weight: 600;">{{Meaning}}</div>
-  {{#Pattern}}<div style="margin: 12px 0; padding: 10px; background: #edf2f7; border-left: 3px solid #38ef7d; border-radius: 4px; font-size: 14px; color: #4a5568;">&#x1F517; <strong>Patrón:</strong> {{Pattern}}</div>{{/Pattern}}
-  {{#Tips}}<div style="margin: 12px 0; padding: 10px; background: #edf2f7; border-left: 3px solid #667eea; border-radius: 4px; font-size: 14px; color: #4a5568;">&#x1F4A1; <strong>Notas:</strong> {{Tips}}</div>{{/Tips}}
-  <div style="margin-top: 12px; padding: 8px; background: #f7fafc; border-radius: 4px;">
-    <div style="font-size: 13px; color: #4a5568;"><strong>Tipo:</strong> {{POS}} | <strong>Registro:</strong> {{Register}}</div>
-    {{#Frecuencia}}<div style="font-size: 13px; color: #4a5568; margin-top: 4px;"><strong>Nivel:</strong> {{Frecuencia}}</div>{{/Frecuencia}}
+<div class="cs-card" id="csCard">
+  <div class="card-top-row">
+    <div class="badges">
+      <span class="badge accent">HSK{{HskLevel}}</span>
+      <span class="badge" id="freqBadge"></span>
+    </div>
+    <button class="badge-toggle" id="btnPinyin" type="button">拼音</button>
+  </div>
+
+  <div class="back-head">
+    <span class="back-hanzi">{{Hanzi}}</span>
+    <span class="back-pinyin">{{PrimaryPinyin}}</span>
+  </div>
+  <div class="meanings">
+    <span class="meaning-es">{{PrimaryMeaningEs}}</span>
+    <span class="meaning-zh">{{PrimaryMeaningZh}}</span>
+  </div>
+
+  <div class="row-controls">
+    <button class="pill-btn" id="btnWord" type="button"></button>
+    <button class="pill-btn" id="btnSentence" type="button"></button>
+  </div>
+
+  <div class="sentence-back" id="sentenceBack"></div>
+  <p class="translation">"{{ExampleEs}}"</p>
+
+  <div class="secondary-block" id="secondaryBlock"></div>
+
+  <div class="disclose">
+    <button class="disclose-summary" id="btnDisclose" type="button"><span class="caret">▸</span> 逐词解析</button>
+    <div class="disclose-panel" id="disclosePanel">
+      <div class="disclose-panel-inner">
+        <div class="row-controls" style="margin-bottom:10px;">
+          <button class="pill-btn" id="btnSentence2" type="button"></button>
+        </div>
+        <div class="breakdown-table" id="breakdownTable"></div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <p class="colloc-title">常用搭配</p>
+    <div class="colloc-list" id="collocList"></div>
   </div>
 </div>
+
+<audio id="audioWord" src="{{AudioWordFile}}"></audio>
+<audio id="audioSentence" src="{{AudioSentenceFile}}"></audio>
+
+<script id="cs-breakdown" type="application/json">{{BreakdownJson}}</script>
+<script id="cs-alignment" type="application/json">{{SentenceAlignmentJson}}</script>
+<script id="cs-secondaries" type="application/json">{{SecondariesJson}}</script>
+<script id="cs-collocations" type="application/json">{{CollocationsJson}}</script>
+
+<script>
+(function () {
+  const ICONS = {
+    speaker: '<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3z"/><path d="M16.5 12c0-1.77-1-3.29-2.5-4.03v8.06c1.5-.74 2.5-2.26 2.5-4.03z"/></svg>',
+  };
+  const FREQ_LABELS = { top1k: 'Top 1000', top3k: 'Top 3000', top5k: 'Top 5000', top10k: 'Top 10 000', rare: '低频' };
+
+  const HANZI = "{{Hanzi}}";
+  const PRIMARY_PINYIN = "{{PrimaryPinyin}}";
+  const FREQ_BUCKET = "{{FreqBucket}}";
+
+  const breakdown = JSON.parse(document.getElementById('cs-breakdown').textContent || '[]');
+  const alignment = JSON.parse(document.getElementById('cs-alignment').textContent || 'null');
+  const secondaries = JSON.parse(document.getElementById('cs-secondaries').textContent || '[]');
+  const collocations = JSON.parse(document.getElementById('cs-collocations').textContent || '[]');
+  const targetIndex = breakdown.findIndex(w => w.hanzi === HANZI);
+
+  function buildWordTimings() {
+    if (!alignment) return breakdown.map(() => ({ start: 0, end: 0 }));
+    const starts = alignment.character_start_times_seconds;
+    const ends = alignment.character_end_times_seconds;
+    let charIdx = 0;
+    return breakdown.map(w => {
+      const len = w.hanzi.length;
+      const s = starts[charIdx];
+      const e = ends[Math.min(charIdx + len - 1, ends.length - 1)];
+      charIdx += len;
+      return { start: s, end: e };
+    });
+  }
+  const timings = buildWordTimings();
+
+  document.getElementById('freqBadge').textContent = FREQ_LABELS[FREQ_BUCKET] || FREQ_BUCKET;
+  document.getElementById('btnWord').innerHTML = ICONS.speaker + ' 词';
+  document.getElementById('btnSentence').innerHTML = ICONS.speaker + ' 句子';
+  document.getElementById('btnSentence2').innerHTML = ICONS.speaker + ' 句子';
+
+  let sentencePinyinShown = false;
+  let disclosureOpen = false;
+  let rafId = null;
+
+  const sentenceBack = document.getElementById('sentenceBack');
+  const btnPinyin = document.getElementById('btnPinyin');
+  const audioWord = document.getElementById('audioWord');
+  const audioSentence = document.getElementById('audioSentence');
+
+  function renderSentence() {
+    sentenceBack.innerHTML = breakdown.map((w, i) => {
+      const body = sentencePinyinShown ? '<ruby>' + w.hanzi + '<rt>' + w.pinyin + '</rt></ruby>' : w.hanzi;
+      const inner = i === targetIndex ? '<span class="tgt">' + body + '</span>' : body;
+      return '<span class="sb-word" data-i="' + i + '">' + inner + '</span>';
+    }).join('');
+  }
+
+  function renderSecondaries() {
+    const el = document.getElementById('secondaryBlock');
+    if (!secondaries.length) { el.style.display = 'none'; return; }
+    el.innerHTML = '<p class="section-title">其他意思</p>' + secondaries.map(s => `
+      <div class="secondary-item">
+        ${s.pinyin !== PRIMARY_PINYIN ? '<span class="sec-pinyin-tag">' + s.pinyin + '</span>' : ''}
+        <div class="sec-texts">
+          <div class="sec-es">${s.es}</div>
+          <div class="sec-zh">${s.zh}</div>
+        </div>
+      </div>`).join('');
+  }
+
+  function renderCollocations() {
+    document.getElementById('collocList').innerHTML = collocations.map(c =>
+      `<span class="colloc-chip">${c.p}<span class="gloss">${c.g}</span></span>`
+    ).join('');
+  }
+
+  function renderBreakdownTable() {
+    document.getElementById('breakdownTable').innerHTML = breakdown.map((w, i) => `
+      <div class="bd-row${i === targetIndex ? ' is-target' : ''}" data-i="${i}">
+        <span class="bd-hanzi">${w.hanzi}</span>
+        <span class="bd-pinyin">${w.pinyin}</span>
+        <span class="bd-role">${w.grammar_role || ''}</span>
+        <span class="bd-meaning">${w.meaning || ''}</span>
+      </div>
+      ${w.usage_note ? '<div class="bd-note">' + w.usage_note + '</div>' : ''}`).join('');
+  }
+
+  function indexAtTime(t) {
+    for (let i = 0; i < timings.length; i++) {
+      if (t >= timings[i].start && t < timings[i].end) return i;
+    }
+    return -1;
+  }
+
+  function setPlayingIndex(index) {
+    document.querySelectorAll('.sb-word, .bd-row').forEach(el => {
+      el.classList.toggle('is-playing', Number(el.dataset.i) === index);
+    });
+  }
+
+  function syncTick() {
+    setPlayingIndex(indexAtTime(audioSentence.currentTime));
+    rafId = requestAnimationFrame(syncTick);
+  }
+
+  audioSentence.addEventListener('play', () => { if (rafId === null) rafId = requestAnimationFrame(syncTick); });
+  audioSentence.addEventListener('pause', () => { if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; } setPlayingIndex(-1); });
+  audioSentence.addEventListener('ended', () => { if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; } setPlayingIndex(-1); });
+
+  function setWordAudioPlaying(on) {
+    document.querySelectorAll('.sb-word[data-i="' + targetIndex + '"], .bd-row[data-i="' + targetIndex + '"]')
+      .forEach(el => el.classList.toggle('is-playing', on));
+  }
+  audioWord.addEventListener('play', () => setWordAudioPlaying(true));
+  audioWord.addEventListener('pause', () => setWordAudioPlaying(false));
+  audioWord.addEventListener('ended', () => setWordAudioPlaying(false));
+
+  function playSentence() { audioSentence.currentTime = 0; audioSentence.play(); }
+  document.getElementById('btnWord').addEventListener('click', () => { audioWord.currentTime = 0; audioWord.play(); });
+  document.getElementById('btnSentence').addEventListener('click', playSentence);
+  document.getElementById('btnSentence2').addEventListener('click', playSentence);
+  btnPinyin.addEventListener('click', () => { sentencePinyinShown = !sentencePinyinShown; btnPinyin.classList.toggle('on', sentencePinyinShown); renderSentence(); });
+
+  const btnDisclose = document.getElementById('btnDisclose');
+  const disclosePanel = document.getElementById('disclosePanel');
+  btnDisclose.addEventListener('click', () => {
+    disclosureOpen = !disclosureOpen;
+    btnDisclose.classList.toggle('open', disclosureOpen);
+    disclosePanel.classList.toggle('open', disclosureOpen);
+  });
+
+  renderSentence();
+  renderSecondaries();
+  renderCollocations();
+  renderBreakdownTable();
+})();
+</script>

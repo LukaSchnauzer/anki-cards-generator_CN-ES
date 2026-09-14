@@ -132,7 +132,8 @@
         <span class="bd-pinyin">${w.pinyin}</span>
         <span class="bd-role">${w.grammar_role || ''}</span>
         <span class="bd-meaning">${w.meaning || ''}</span>
-      </div>`).join('');
+      </div>
+      ${w.usage_note ? '<div class="bd-note">' + w.usage_note + '</div>' : ''}`).join('');
   }
 
   function indexAtTime(t) {
