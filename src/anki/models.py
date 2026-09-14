@@ -21,18 +21,20 @@ def create_model_sentence(force_recreate: bool = False):
         return
 
     fields = [
-        "SortKey", "Hanzi", "Pinyin", "Meaning", "SentenceCN", "SentenceES",
-        "Tips", "Collocations", "POS", "Register", "Frecuencia", "Tags", "Audio", "WordAudio",
-        "FrontLine", "Hint1", "Hint2", "Hint3"
+        "SortKey", "Hanzi", "HskLevel", "FreqBucket",
+        "PrimaryPinyin", "PrimaryMeaningEs", "PrimaryMeaningZh",
+        "ExampleZh", "ExampleEs",
+        "BreakdownJson", "SecondariesJson", "CollocationsJson",
+        "AudioWordFile", "AudioSentenceFile", "SentenceAlignmentJson",
     ]
-    
+
     templates = [{
         "Name": "ChinoSRS_SentenceCard",
         "Front": load_template("sentence_card_front.html"),
         "Back": load_template("sentence_card_back.html")
     }]
-    
-    css = ""
+
+    css = load_template("sentence_card.css")
     post("createModel", modelName=model_name, inOrderFields=fields, cardTemplates=templates, css=css)
 
 

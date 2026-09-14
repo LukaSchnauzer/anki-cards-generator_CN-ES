@@ -58,7 +58,9 @@ CREATE TABLE IF NOT EXISTS card_examples (
     example_zh       TEXT NOT NULL,
     example_es       TEXT NOT NULL,
     example_pinyin   TEXT,                        -- pinyin completo de la oración
-    breakdown_json   TEXT,                        -- [{"hanzi":..,"pinyin":..,"meaning":..}, ...]
+    -- breakdown_json: [{"hanzi":..,"pinyin":..,"grammar_role":..,"meaning":..,"usage_note":..|null}, ...]
+    breakdown_json   TEXT,
+    grammar_notes    TEXT,                        -- JSON: string[] con notas de estructura gramatical de la oración (colapsable, junto al desglose)
     created_at       TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -70,6 +72,7 @@ CREATE TABLE IF NOT EXISTS audio_files (
     speed            TEXT NOT NULL DEFAULT 'normal' CHECK (speed IN ('normal', 'slow')),
     engine           TEXT NOT NULL,                -- gtts | azure | elevenlabs
     file_path        TEXT NOT NULL,
+    alignment_json   TEXT,                         -- alineación por carácter de ElevenLabs (characters + start/end), NULL si el motor no la da
     created_at       TEXT NOT NULL DEFAULT (datetime('now')),
     CHECK (
         (scope = 'word' AND reading_id IS NOT NULL AND card_example_id IS NULL) OR
@@ -79,13 +82,15 @@ CREATE TABLE IF NOT EXISTS audio_files (
 
 CREATE TABLE IF NOT EXISTS generation_phases (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    card_id     INTEGER NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
-    phase       TEXT NOT NULL,                     -- ej. draft | guardrail | audio | breakdown
+    word_id     INTEGER REFERENCES words(id) ON DELETE CASCADE,   -- para fases a nivel de palabra (ej. word_prep)
+    card_id     INTEGER REFERENCES cards(id) ON DELETE CASCADE,   -- para fases a nivel de tarjeta (ej. draft, guardrail)
+    phase       TEXT NOT NULL,                     -- ej. word_prep | draft | guardrail | audio | breakdown
     status      TEXT NOT NULL DEFAULT 'pending',    -- pending|running|passed|failed
     attempt     INTEGER NOT NULL DEFAULT 1,
     notes       TEXT,
     created_at  TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    CHECK ((word_id IS NOT NULL) != (card_id IS NOT NULL))
 );
 
 CREATE INDEX IF NOT EXISTS idx_readings_word_id ON readings(word_id);
@@ -97,3 +102,4 @@ CREATE INDEX IF NOT EXISTS idx_card_examples_card_id ON card_examples(card_id);
 CREATE INDEX IF NOT EXISTS idx_audio_files_reading_id ON audio_files(reading_id);
 CREATE INDEX IF NOT EXISTS idx_audio_files_card_example_id ON audio_files(card_example_id);
 CREATE INDEX IF NOT EXISTS idx_generation_phases_card_id ON generation_phases(card_id);
+CREATE INDEX IF NOT EXISTS idx_generation_phases_word_id ON generation_phases(word_id);

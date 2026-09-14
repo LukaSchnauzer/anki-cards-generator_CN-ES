@@ -17,6 +17,10 @@ def init_db(db_path: Path = DEFAULT_DB_PATH) -> None:
     db_path.parent.mkdir(parents=True, exist_ok=True)
     schema_sql = SCHEMA_PATH.read_text(encoding="utf-8")
     with sqlite3.connect(db_path) as conn:
+        # WAL: permite lectores/escritores concurrentes sin "database is locked" —
+        # necesario porque el grafo de generación corre nodos en paralelo, cada
+        # uno con su propia conexión a este mismo archivo.
+        conn.execute("PRAGMA journal_mode = WAL")
         conn.executescript(schema_sql)
 
 
@@ -26,6 +30,7 @@ def get_connection(db_path: Path = DEFAULT_DB_PATH):
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA busy_timeout = 5000")
     try:
         yield conn
         conn.commit()

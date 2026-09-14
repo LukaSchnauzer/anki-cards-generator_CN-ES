@@ -7,13 +7,15 @@ from gtts import gTTS
 class GTTSEngine:
     """Google Text-to-Speech engine."""
     
-    def __init__(self, lang: str = "zh-CN"):
+    def __init__(self, lang: str = "zh-CN", slow: bool = False):
         """Initialize Google TTS engine.
-        
+
         Args:
             lang: Language code (default: zh-CN for Mandarin Chinese)
+            slow: If True, generate speech at gTTS's slower preset rate
         """
         self.lang = lang
+        self.slow = slow
         self.name = "Google TTS"
     
     def generate_audio(self, text: str, output_path: str) -> bool:
@@ -31,7 +33,7 @@ class GTTSEngine:
             os.makedirs(os.path.dirname(output_path), exist_ok=True)
             
             # Generate audio
-            tts = gTTS(text=text, lang=self.lang)
+            tts = gTTS(text=text, lang=self.lang, slow=self.slow)
             tts.save(output_path)
             
             # Verify file was created
