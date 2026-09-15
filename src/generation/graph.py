@@ -68,7 +68,7 @@ def word_prep_node(state: WordPipelineState) -> dict:
         # escalar a 'needs_human'.
         conn.execute(
             "UPDATE words SET word_prep_status = ? WHERE id = ?",
-            ("pending" if ok else "failed", state["word_id"]),
+            ("ok" if ok else "failed", state["word_id"]),
         )
     return {"word_prep_ok": ok}
 

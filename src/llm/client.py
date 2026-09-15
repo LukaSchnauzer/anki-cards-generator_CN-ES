@@ -23,7 +23,7 @@ OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
 # el mismo modelo caro. Default a gpt-4o en ambos si no se define nada, para
 # no cambiar el comportamiento actual silenciosamente.
 GENERATION_MODEL = os.getenv("LLM_GENERATION_MODEL", "gpt-4o")
-GUARDRAIL_MODEL = os.getenv("LLM_GUARDRAIL_MODEL", "gpt-4o")
+GUARDRAIL_MODEL = os.getenv("LLM_GUARDRAIL_MODEL", "gpt-4o-mini")
 DEFAULT_MODEL = GENERATION_MODEL
 
 
@@ -64,6 +64,6 @@ def call_llm(system_prompt: str, user_prompt: str, model: str = DEFAULT_MODEL, t
 
     data = r.json()
     usage = data.get("usage", {})
-    get_tracker().add_llm_usage(usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0))
+    get_tracker().add_llm_usage(usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0), model=model)
 
     return data["choices"][0]["message"]["content"]

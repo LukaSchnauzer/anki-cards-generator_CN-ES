@@ -79,7 +79,7 @@ python main.py generate                                # corre el pipeline sobre
 python main.py export --hsk-level 3                    # empuja lo 'ready' al mazo "ChinoSRS - HSK3"
 ```
 
-Todos los comandos (revisión manual con flags de Anki, dashboard de estado, limpieza de audio huérfano, regeneración puntual) están documentados en **[docs/CLI_CHEATSHEET.md](docs/CLI_CHEATSHEET.md)**.
+El camino completo recomendado (con estimados reales de costo y de cuánto termina necesitando revisión manual) está en **[docs/GETTING_STARTED.md](docs/GETTING_STARTED.md)**. Todos los comandos están documentados en **[docs/CLI_CHEATSHEET.md](docs/CLI_CHEATSHEET.md)** (referencia rápida de sintaxis) y **[docs/WORKFLOWS.md](docs/WORKFLOWS.md)** (explicaciones y ejemplos: revisión manual con flags de Anki, casos difíciles de `needs_human`, auditoría de naturalidad, dashboard de estado, regeneración puntual).
 
 ---
 
@@ -100,7 +100,7 @@ Frente: solo el audio de la oración (velocidad normal + lenta), sin texto. 2 pi
 
 ## Flujo de revisión manual
 
-Las tarjetas que fallan el guardrail automático quedan en `guardrail_failed` (no se reintentan solas — evita gasto indefinido en algo estructuralmente roto). Para las que se ven mal ya en Anki: se flaguean con el flag rojo nativo de Anki (Ctrl+1), se importan a SQLite, se regeneran, y se re-exportan — sin que eso afecte la programación de repaso de la tarjeta. Las que agotan el tope de reintentos (`needs_human`) suelen caer en dos categorías con su propia herramienta: significado primario mal clasificado (`swap-primary`) o palabra sin forma natural de aparecer sola (`manual-card`, oración escrita a mano + desglose vía LLM). Detalle completo en el cheat sheet.
+Las tarjetas que fallan el guardrail automático quedan en `guardrail_failed` (no se reintentan solas — evita gasto indefinido en algo estructuralmente roto). Para las que se ven mal ya en Anki: se flaguean con el flag rojo nativo de Anki (Ctrl+1), se importan a SQLite, se regeneran, y se re-exportan — sin que eso afecte la programación de repaso de la tarjeta. Las que agotan el tope de reintentos (`needs_human`) suelen caer en cuatro categorías con su propia herramienta: significado primario mal clasificado pero ya registrado (`swap-primary`), significado dominante que ni siquiera estaba registrado (`add-reading`), lectura correcta ya registrada pero mal descrita (`edit-reading`), o palabra sin forma natural de aparecer sola (`manual-card`, oración escrita a mano + desglose vía LLM). Como el guardrail evalúa gramática/traducción pero no si una combinación suena forzada a un nativo, hay además una auditoría aparte (`audit-naturalness`) que revisa lo ya generado buscando ese patrón específico y lo marca `needs_human` directamente. Detalle completo en [WORKFLOWS.md](docs/WORKFLOWS.md).
 
 ---
 
@@ -131,7 +131,14 @@ ChinoSRS/
 │   │   ├── guardrail.py            # Verificación LLM composable
 │   │   ├── prompts.py              # Prompts + checks de guardrail
 │   │   ├── audio_gen.py            # Generación/caché de audio TTS
-│   │   └── regenerate.py           # Regeneración puntual (flagged/guardrail_failed)
+│   │   ├── regenerate.py           # Regeneración puntual (flagged/guardrail_failed)
+│   │   ├── manual_card.py          # Oración escrita a mano + desglose vía LLM
+│   │   ├── manual_card_batch.py    # Corre manual_card sobre una lista en JSON
+│   │   ├── swap_reading.py         # Promueve una lectura secundaria ya registrada a primaria
+│   │   ├── add_reading.py          # Agrega una lectura que no estaba registrada
+│   │   ├── edit_reading.py         # Corrige el texto de una lectura ya registrada
+│   │   ├── unflag_card.py          # Quita el flag de review sin tocar el contenido (falsos positivos)
+│   │   └── audit_naturalness.py    # Auditoría en lote: detecta usos forzados en palabras de 1 carácter
 │   │
 │   ├── audio/engines/
 │   │   ├── elevenlabs_engine.py    # Motor TTS principal (con alineación)
@@ -146,13 +153,16 @@ ChinoSRS/
 │   ├── templates/                  # HTML/CSS de las 3 tarjetas (Front/Back/estilos)
 │   │
 │   └── utils/
+│       ├── inspect_word.py         # Lecturas/tarjetas/últimos intentos de una palabra puntual
 │       ├── dashboard.py            # Estado de la DB, guardrails, flags, audio huérfano
 │       ├── clean_audio.py          # Limpieza de audio huérfano
 │       ├── cost_tracker.py         # Costo real (tokens LLM + caracteres TTS) x precio de lista
 │       ├── frequency.py            # rank -> bucket de frecuencia
 │       └── dump_deck.py            # Respaldo de un mazo de Anki a JSON
 │
-├── docs/CLI_CHEATSHEET.md          # Referencia rápida de todos los comandos
+├── docs/GETTING_STARTED.md         # Camino completo paso a paso, con estimados de costo/revisión manual
+├── docs/CLI_CHEATSHEET.md          # Referencia rápida de sintaxis de todos los comandos
+├── docs/WORKFLOWS.md               # Explicaciones y ejemplos de cada flujo/herramienta
 ├── resources/
 │   ├── complete.json               # Vocabulario HSK fuente
 │   └── audios/                     # Audio generado (fuera de git)

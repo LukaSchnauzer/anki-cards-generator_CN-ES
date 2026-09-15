@@ -122,7 +122,7 @@ def regenerate_word_prep(word_id: int, model: str = GENERATION_MODEL) -> bool:
     with get_connection() as conn:
         if ok:
             conn.execute(
-                "UPDATE words SET word_prep_status = 'pending', word_prep_attempts = 0 WHERE id = ?", (word_id,)
+                "UPDATE words SET word_prep_status = 'ok', word_prep_attempts = 0 WHERE id = ?", (word_id,)
             )
         else:
             attempts = word["word_prep_attempts"] + 1

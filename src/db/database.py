@@ -38,6 +38,18 @@ def _migrate(conn: sqlite3.Connection) -> None:
     # con el valor viejo.
     conn.execute("UPDATE cards SET review_status = 'unflagged' WHERE review_status = 'pending'")
 
+    # Mismo problema, mismo fix, en words.word_prep_status: 'pending' se
+    # reusaba tanto para "nunca se intentó" (el DEFAULT) como para "word_prep
+    # ya tuvo éxito" (lo que escribía graph.py/regenerate.py). Ahora el éxito
+    # se marca 'ok'; esto reclasifica las filas que ya habían tenido éxito
+    # (tienen al menos una lectura con source='llm') sin tocar las que de
+    # verdad nunca se han intentado. Idempotente.
+    conn.execute(
+        """UPDATE words SET word_prep_status = 'ok'
+           WHERE word_prep_status = 'pending'
+             AND EXISTS (SELECT 1 FROM readings WHERE readings.word_id = words.id AND readings.source = 'llm')"""
+    )
+
 
 def init_db(db_path: Path = DEFAULT_DB_PATH) -> None:
     """Crea la base de datos y aplica el esquema si no existen las tablas."""

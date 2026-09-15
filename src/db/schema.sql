@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS words (
     radical               TEXT,
     hsk_level             INTEGER,
     export_level          INTEGER,               -- override de a qué mazo/modelo exportar (NULL = usar hsk_level). El chip visible en la tarjeta SIEMPRE usa hsk_level, nunca esto — ver export.py
-    word_prep_status      TEXT NOT NULL DEFAULT 'pending',  -- pending|failed|needs_human — mismo mecanismo de tope que cards.review_status, pero a nivel palabra (word_prep no genera tarjetas)
+    word_prep_status      TEXT NOT NULL DEFAULT 'pending',  -- pending|ok|failed|needs_human — mismo mecanismo de tope que cards.review_status, pero a nivel palabra (word_prep no genera tarjetas). 'pending' = nunca se ha intentado; 'ok' = word_prep ya tuvo éxito (antes reusaba 'pending' para esto también — ambiguo, igual que pasaba con cards.review_status)
     word_prep_attempts    INTEGER NOT NULL DEFAULT 0,       -- rondas de regenerate_word_prep fallidas consecutivas desde el último éxito
     hsk_standard          TEXT,                  -- 'new' | 'old'
     frequency_rank        INTEGER,

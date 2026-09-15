@@ -91,6 +91,37 @@ def _content_source_table(conn, hsk_level: Optional[int]) -> Table:
     return table
 
 
+def _export_table(conn, hsk_level: Optional[int]) -> Table:
+    """anki_note_id se pone la primera vez que `export` crea la nota en Anki
+    (export.py:238) — NULL significa que esa tarjeta nunca se ha exportado,
+    sin importar su status/review_status actual. Una tarjeta con
+    anki_note_id ya puesto pero status != 'ready' significa que SÍ está en
+    Anki, pero con contenido viejo — export no la va a tocar hasta que se
+    corrija (ver docs/PIPELINE.md)."""
+    where, params = _where(hsk_level)
+    rows = conn.execute(
+        f"""
+        SELECT w.hsk_level, c.card_type,
+               CASE WHEN c.anki_note_id IS NULL THEN 'no' ELSE 'sí' END AS exported,
+               COUNT(*) AS n
+        FROM cards c JOIN words w ON w.id = c.word_id
+        {where}
+        GROUP BY w.hsk_level, c.card_type, exported
+        ORDER BY w.hsk_level, c.card_type, exported
+        """,
+        params,
+    ).fetchall()
+
+    table = Table(title="Tarjetas exportadas a Anki (anki_note_id)")
+    table.add_column("HSK")
+    table.add_column("Tipo")
+    table.add_column("Exportada")
+    table.add_column("Cantidad", justify="right")
+    for r in rows:
+        table.add_row(str(r["hsk_level"]), r["card_type"], r["exported"], str(r["n"]))
+    return table
+
+
 def _guardrail_failed_table(conn, hsk_level: Optional[int]) -> Table:
     where, params = _where(hsk_level)
     clause = f"{where} AND" if where else "WHERE"
@@ -225,6 +256,16 @@ def print_dashboard(hsk_level: Optional[int] = None) -> None:
         manual_count = conn.execute("SELECT COUNT(*) AS n FROM cards WHERE content_source = 'manual'").fetchone()["n"]
         if manual_count:
             console.print(_content_source_table(conn, hsk_level))
+        console.print(_export_table(conn, hsk_level))
+        where, params = _where(hsk_level)
+        clause = f"{where} AND" if where else "WHERE"
+        pending_export = conn.execute(
+            f"""SELECT COUNT(*) AS n FROM cards c JOIN words w ON w.id = c.word_id
+                {clause} c.status = 'ready' AND c.anki_note_id IS NULL""",
+            params,
+        ).fetchone()["n"]
+        if pending_export:
+            console.print(f"[bold yellow]  → {pending_export} tarjeta(s) 'ready' esperando su primer `export`[/bold yellow]\n")
         console.print(_guardrail_failed_table(conn, hsk_level))
         console.print(_review_flagged_table(conn, hsk_level))
         console.print(_stuck_word_prep_table(conn, hsk_level))
