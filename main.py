@@ -289,6 +289,18 @@ def workflow_inspect_word(args):
     return run_command(cmd, "Inspección de palabra")
 
 
+def workflow_resync_due_order(args):
+    """Reescribe la posición en la cola de tarjetas nuevas para que coincida con SortKey (solo tarjetas nunca repasadas)."""
+    print_header("🔀 Sincronizar orden de repaso")
+
+    python_cmd = get_python_cmd()
+    cmd = [python_cmd, "-m", "src.anki.resync_due_order", "--hsk-level", str(args.hsk_level)]
+    if args.apply:
+        cmd.append("--apply")
+
+    return run_command(cmd, "Sincronización de orden de repaso")
+
+
 def workflow_dashboard(args):
     """Muestra el estado de la DB: tarjetas por estado, fallos de guardrail, flaggeadas y audio huérfano."""
     print_header("📊 Dashboard de estado")
@@ -429,6 +441,11 @@ Examples:
     inspect_parser.add_argument("--word", required=True, help="Hanzi de la palabra")
     inspect_parser.add_argument("--hsk-level", type=int, default=3, help="--hsk-level 0 para no filtrar por nivel")
 
+    # Resync due order
+    resync_parser = subparsers.add_parser("resync-due-order", help="Reescribe la posición en la cola de nuevas para que coincida con SortKey")
+    resync_parser.add_argument("--hsk-level", type=int, default=3)
+    resync_parser.add_argument("--apply", action="store_true", help="Aplica de verdad (default: dry-run)")
+
     # Dashboard
     dashboard_parser = subparsers.add_parser("dashboard", help="Muestra el estado de la DB de generación")
     dashboard_parser.add_argument("--hsk-level", type=int, default=None, help="Filtrar por nivel HSK (default: todos)")
@@ -479,6 +496,8 @@ Examples:
         success = workflow_unflag(args)
     elif args.command == "inspect-word":
         success = workflow_inspect_word(args)
+    elif args.command == "resync-due-order":
+        success = workflow_resync_due_order(args)
     elif args.command == "audit-naturalness":
         success = workflow_audit_naturalness(args)
     elif args.command == "dashboard":

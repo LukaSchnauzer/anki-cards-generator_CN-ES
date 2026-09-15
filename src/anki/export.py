@@ -63,15 +63,20 @@ def deck_name_for(hsk_level: int) -> str:
 
 
 def _sort_key(hsk_level: int, frequency_rank: Optional[int]) -> str:
-    """Primer campo del modelo -> Anki lo usa como Sort Field por defecto.
-    nivel HSK real (2 dígitos) + bucket (2 dígitos) + aleatorio (4 dígitos) —
-    mismo formato que el pipeline viejo (ej. "020100123"), para que el
-    Browser ordene igual que como se crearon las notas (ver
-    _FREQ_BUCKET_SQL_CASE). En el uso normal (un nivel por mazo) el prefijo
-    de nivel es idéntico en toda la exportación, así que no cambia nada —
-    solo importa cuando se mezclan niveles a propósito (ver export_level)."""
+    """Primer campo del modelo -> Anki lo usa como Sort Field por defecto Y
+    para detectar duplicados (compara el checksum del primer campo dentro
+    del mismo note type) — así que además de para ordenar, este valor tiene
+    que ser único de verdad.
+
+    nivel HSK real (2 dígitos) + bucket (2 dígitos) + aleatorio (6 dígitos).
+    Antes eran 4 dígitos (10,000 valores): con export en lotes de 50 dentro
+    del mismo nivel+bucket, la probabilidad de que dos de esas 50 sacaran el
+    mismo número por azar (paradoja del cumpleaños) era ~11-12% por lote —
+    confirmado en vivo como la causa de que addNotes devolviera el lote
+    entero en null. Con 6 dígitos (1,000,000 de valores) esa probabilidad
+    cae a ~0.12%, prácticamente descartado."""
     bucket_code = _FREQ_BUCKET_ORDER.get(get_freq_bucket(frequency_rank), 9)
-    return f"{hsk_level:02d}{bucket_code:02d}{random.randint(0, 9999):04d}"
+    return f"{hsk_level:02d}{bucket_code:02d}{random.randint(0, 999999):06d}"
 
 
 def _fetch_word(conn, word_id: int) -> dict:
@@ -300,10 +305,24 @@ def export_pending(hsk_level: int = 3, limit: Optional[int] = None) -> dict:
                         for row, word, fields in creates
                     ]
                     note_ids = post("addNotes", notes=notes_payload)
+                    if not isinstance(note_ids, list) or len(note_ids) != len(notes_payload):
+                        # AnkiConnect puede devolver el lote ENTERO en null si UNA
+                        # sola nota tiene problema (confirmado en vivo: 继续/audio
+                        # fallaba así en lote, pero funcionaba perfecto sola) — se
+                        # pierde la alineación por posición, así que se reintenta
+                        # nota por nota para aislar cuál es la real (mismo
+                        # fallback que usaba el pipeline viejo, csv_to_anki.py).
+                        note_ids = []
+                        for note in notes_payload:
+                            try:
+                                r = post("addNotes", notes=[note])
+                            except Exception:
+                                r = None
+                            note_ids.append(r[0] if r else None)
                     with get_connection() as conn:
-                        for (row, word, fields), note_id in zip(creates, note_ids or [None] * len(creates)):
+                        for (row, word, fields), note_id in zip(creates, note_ids):
                             if note_id is None:
-                                errors.append(f"'{word['hanzi']}' ({row['card_type']}): addNotes devolvió None (¿duplicado en Anki?)")
+                                errors.append(f"'{word['hanzi']}' ({row['card_type']}): addNotes devolvió None (¿duplicado real en Anki?)")
                                 progress.update(task, advance=1, errors=len(errors))
                             else:
                                 conn.execute("UPDATE cards SET anki_note_id = ? WHERE id = ?", (note_id, row["card_id"]))

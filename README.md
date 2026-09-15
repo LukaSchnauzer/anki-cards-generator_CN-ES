@@ -147,7 +147,8 @@ ChinoSRS/
 │   ├── anki/
 │   │   ├── api.py                  # Wrapper de AnkiConnect
 │   │   ├── models.py               # Note types por (tipo de tarjeta, nivel HSK)
-│   │   ├── export.py               # Exportador SQLite -> Anki
+│   │   ├── export.py               # Exportador SQLite -> Anki (en lotes)
+│   │   ├── resync_due_order.py     # Reescribe due para que coincida con SortKey
 │   │   └── review.py               # Importa flags de Anki a SQLite
 │   │
 │   ├── templates/                  # HTML/CSS de las 3 tarjetas (Front/Back/estilos)

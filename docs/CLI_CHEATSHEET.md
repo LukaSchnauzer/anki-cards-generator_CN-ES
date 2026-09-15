@@ -55,9 +55,10 @@ unflag             --word <hanzi> --type <sentence|pattern|audio> [--hsk-level 3
 ## Diagnóstico
 
 ```
-inspect-word --word <hanzi> [--hsk-level 3]
-dashboard    [--hsk-level N]
-clean-audio  [--yes]
+inspect-word     --word <hanzi> [--hsk-level 3]
+resync-due-order [--hsk-level 3] [--apply]
+dashboard        [--hsk-level N]
+clean-audio      [--yes]
 ```
 
 ## Legacy
