@@ -162,6 +162,20 @@ def workflow_regenerate(args):
     return run_command(cmd, "Regeneración de tarjetas")
 
 
+def workflow_manual_card(args):
+    """Guarda una tarjeta con una oración escrita a mano (desglose vía LLM, oración/traducción intactas)."""
+    print_header("✍️  Tarjeta manual")
+
+    python_cmd = get_python_cmd()
+    cmd = [
+        python_cmd, "-m", "src.generation.manual_card",
+        "--word", args.word, "--type", args.type, "--zh", args.zh, "--es", args.es,
+        "--hsk-level", str(args.hsk_level),
+    ]
+
+    return run_command(cmd, "Guardado de tarjeta manual")
+
+
 def workflow_dashboard(args):
     """Muestra el estado de la DB: tarjetas por estado, fallos de guardrail, flaggeadas y audio huérfano."""
     print_header("📊 Dashboard de estado")
@@ -245,6 +259,14 @@ Examples:
     regen_parser.add_argument("--type", choices=["sentence", "pattern", "audio"], help="Tipo de tarjeta puntual")
     regen_parser.add_argument("--hsk-level", type=int, default=3)
 
+    # Manual card
+    manual_parser = subparsers.add_parser("manual-card", help="Guarda una tarjeta con una oración escrita a mano")
+    manual_parser.add_argument("--word", required=True, help="Hanzi de la palabra")
+    manual_parser.add_argument("--type", required=True, choices=["sentence", "pattern", "audio"])
+    manual_parser.add_argument("--zh", required=True, help="Oración en chino (ya aprobada)")
+    manual_parser.add_argument("--es", required=True, help="Traducción al español (ya aprobada)")
+    manual_parser.add_argument("--hsk-level", type=int, default=3)
+
     # Dashboard
     dashboard_parser = subparsers.add_parser("dashboard", help="Muestra el estado de la DB de generación")
     dashboard_parser.add_argument("--hsk-level", type=int, default=None, help="Filtrar por nivel HSK (default: todos)")
@@ -281,6 +303,8 @@ Examples:
         success = workflow_flag_batch(args)
     elif args.command == "regenerate":
         success = workflow_regenerate(args)
+    elif args.command == "manual-card":
+        success = workflow_manual_card(args)
     elif args.command == "dashboard":
         success = workflow_dashboard(args)
     elif args.command == "clean-audio":

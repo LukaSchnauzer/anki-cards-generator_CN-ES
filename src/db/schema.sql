@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS cards (
     status         TEXT NOT NULL DEFAULT 'pending',        -- pending|generated|guardrail_failed|guardrail_passed|ready
     review_status  TEXT NOT NULL DEFAULT 'unflagged',      -- unflagged|flagged_bad|needs_human — eje de revisión HUMANA (flag de Anki), independiente de `status` (que es progreso de generación). 'unflagged' = nadie la marcó mala todavía, sin importar si status es ready o guardrail_failed bajo el tope. needs_human = agotó el tope de regenerate --flagged, requiere intervención
     review_notes   TEXT,
+    content_source TEXT NOT NULL DEFAULT 'llm',            -- llm|manual — eje de PROCEDENCIA del contenido (independiente de review_status): 'manual' = oración escrita a mano vía `manual-card` (ver src/generation/manual_card.py). Ortogonal a review_status: una tarjeta manual también puede flaggearse después si se le nota un error.
     regen_attempts INTEGER NOT NULL DEFAULT 0,             -- rondas de regenerate_card fallidas consecutivas desde el último éxito
     anki_note_id   INTEGER,                                -- noteId de AnkiConnect una vez exportada (NULL = nunca exportada)
     created_at     TEXT NOT NULL DEFAULT (datetime('now')),

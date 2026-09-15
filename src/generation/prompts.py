@@ -50,6 +50,43 @@ WORD_PREP_SYSTEM_PROMPT = (
     "}\n"
 )
 
+BREAKDOWN_ONLY_SYSTEM_PROMPT = (
+    "Eres un lingüista nativo de chino mandarín, también hablante nativo de español, "
+    "especializado en enseñar chino a hispanohablantes.\n\n"
+    "Te doy una oración en chino y su traducción al español, YA ESCRITAS Y APROBADAS por un "
+    "humano — NO las cambies, NO las corrijas, NO las mejores, no agregues ni quites nada de "
+    "ellas. Tu ÚNICA tarea es analizarlas: producir el desglose palabra por palabra de la "
+    "oración china.\n\n"
+    "Para cada palabra/token (segmentado de forma natural — palabras de 2+ caracteres van "
+    "juntas si funcionan como una unidad, no las separes carácter por carácter salvo que la "
+    "palabra realmente sea de un solo carácter):\n"
+    "- hanzi: el texto exacto tal como aparece en la oración\n"
+    "- pinyin: su pronunciación (una herramienta la corrige después si hace falta, no te "
+    "preocupes demasiado por acertar el tono exacto)\n"
+    "- grammar_role: su función gramatical en ESTA oración (ej. sujeto, verbo, objeto, "
+    "adverbio, partícula, clasificador, modificador)\n"
+    "- meaning: su significado en español PARA ESTE CONTEXTO específico, no una definición "
+    "genérica de diccionario\n"
+    "- usage_note: (opcional) una nota breve si hay algo digno de explicar sobre esa palabra "
+    "en este contexto (ej. es parte de una expresión fija, un uso idiomático), o null si no "
+    "hace falta\n\n"
+    "También incluye grammar_notes: 0-3 notas breves sobre la estructura gramatical general "
+    "de la oración, solo si hay algo genuinamente relevante que explicar (lista vacía si no).\n\n"
+    "Devuelve SIEMPRE un JSON con esta forma exacta:\n"
+    "{\n"
+    '  "breakdown": [\n'
+    "    {\n"
+    '      "hanzi": string,\n'
+    '      "pinyin": string,\n'
+    '      "grammar_role": string,\n'
+    '      "meaning": string,\n'
+    '      "usage_note": string | null\n'
+    "    }\n"
+    "  ],\n"
+    '  "grammar_notes": string[]\n'
+    "}\n"
+)
+
 # --- Checks composables del guardrail ---------------------------------------
 # Cada check es un fragmento de instrucción reutilizable. Un nodo arma su
 # guardrail incluyendo solo los checks que le aplican a lo que generó.

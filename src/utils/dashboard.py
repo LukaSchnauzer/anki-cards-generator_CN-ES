@@ -68,6 +68,29 @@ def _review_table(conn, hsk_level: Optional[int]) -> Table:
     return table
 
 
+def _content_source_table(conn, hsk_level: Optional[int]) -> Table:
+    """Solo tiene sentido mostrar esto si hay al menos una tarjeta manual —
+    para una DB recién empezada (todo 'llm') es ruido innecesario."""
+    where, params = _where(hsk_level)
+    rows = conn.execute(
+        f"""
+        SELECT c.content_source, COUNT(*) AS n
+        FROM cards c JOIN words w ON w.id = c.word_id
+        {where}
+        GROUP BY c.content_source
+        ORDER BY c.content_source
+        """,
+        params,
+    ).fetchall()
+
+    table = Table(title="Tarjetas por content_source")
+    table.add_column("content_source")
+    table.add_column("Cantidad", justify="right")
+    for r in rows:
+        table.add_row(r["content_source"], str(r["n"]))
+    return table
+
+
 def _guardrail_failed_table(conn, hsk_level: Optional[int]) -> Table:
     where, params = _where(hsk_level)
     clause = f"{where} AND" if where else "WHERE"
@@ -199,6 +222,9 @@ def print_dashboard(hsk_level: Optional[int] = None) -> None:
     with get_connection() as conn:
         console.print(_status_table(conn, hsk_level))
         console.print(_review_table(conn, hsk_level))
+        manual_count = conn.execute("SELECT COUNT(*) AS n FROM cards WHERE content_source = 'manual'").fetchone()["n"]
+        if manual_count:
+            console.print(_content_source_table(conn, hsk_level))
         console.print(_guardrail_failed_table(conn, hsk_level))
         console.print(_review_flagged_table(conn, hsk_level))
         console.print(_stuck_word_prep_table(conn, hsk_level))

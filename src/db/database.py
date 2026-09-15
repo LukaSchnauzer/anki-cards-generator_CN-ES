@@ -20,6 +20,8 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE cards ADD COLUMN anki_note_id INTEGER")
     if "regen_attempts" not in cols:
         conn.execute("ALTER TABLE cards ADD COLUMN regen_attempts INTEGER NOT NULL DEFAULT 0")
+    if "content_source" not in cols:
+        conn.execute("ALTER TABLE cards ADD COLUMN content_source TEXT NOT NULL DEFAULT 'llm'")
 
     word_cols = {row[1] for row in conn.execute("PRAGMA table_info(words)").fetchall()}
     if "export_level" not in word_cols:
