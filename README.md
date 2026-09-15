@@ -100,7 +100,7 @@ Frente: solo el audio de la oración (velocidad normal + lenta), sin texto. 2 pi
 
 ## Flujo de revisión manual
 
-Las tarjetas que fallan el guardrail automático quedan en `guardrail_failed` (no se reintentan solas — evita gasto indefinido en algo estructuralmente roto). Para las que se ven mal ya en Anki: se flaguean con el flag rojo nativo de Anki (Ctrl+1), se importan a SQLite, se regeneran, y se re-exportan — sin que eso afecte la programación de repaso de la tarjeta. Detalle completo en el cheat sheet.
+Las tarjetas que fallan el guardrail automático quedan en `guardrail_failed` (no se reintentan solas — evita gasto indefinido en algo estructuralmente roto). Para las que se ven mal ya en Anki: se flaguean con el flag rojo nativo de Anki (Ctrl+1), se importan a SQLite, se regeneran, y se re-exportan — sin que eso afecte la programación de repaso de la tarjeta. Las que agotan el tope de reintentos (`needs_human`) suelen caer en dos categorías con su propia herramienta: significado primario mal clasificado (`swap-primary`) o palabra sin forma natural de aparecer sola (`manual-card`, oración escrita a mano + desglose vía LLM). Detalle completo en el cheat sheet.
 
 ---
 

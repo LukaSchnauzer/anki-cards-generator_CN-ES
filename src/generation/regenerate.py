@@ -280,5 +280,11 @@ if __name__ == "__main__":
         else:
             ok = regenerate_card(word["id"], args.type)
             print("OK" if ok else "FAIL")
+            tracker = get_tracker()
+            print(
+                f"Costo estimado: ${tracker.total_cost_usd:.4f}"
+                f"  ·  LLM ${tracker.llm_cost_usd:.4f} ({tracker.llm_calls} llamadas)"
+                f"  ·  ElevenLabs ${tracker.elevenlabs_cost_usd:.4f} ({tracker.elevenlabs_calls} llamadas)"
+            )
     else:
         parser.error("Usa --flagged, o --word <hanzi> junto con --type <sentence|pattern|audio>")

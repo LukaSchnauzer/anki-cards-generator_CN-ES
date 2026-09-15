@@ -32,6 +32,7 @@ from src.generation.card_common import (
 from src.generation.graph import card_audio_node
 from src.generation.prompts import BREAKDOWN_ONLY_SYSTEM_PROMPT
 from src.llm.client import GENERATION_MODEL, LLMError, call_llm
+from src.utils.cost_tracker import get_tracker
 
 CARD_TYPES = ("sentence", "pattern", "audio")
 
@@ -187,3 +188,9 @@ if __name__ == "__main__":
     else:
         ok = save_manual_card(word["id"], args.type, args.zh, args.es)
         print("OK" if ok else "FAIL (revisa el audio/desglose)")
+        tracker = get_tracker()
+        print(
+            f"Costo estimado: ${tracker.total_cost_usd:.4f}"
+            f"  ·  LLM ${tracker.llm_cost_usd:.4f} ({tracker.llm_calls} llamadas)"
+            f"  ·  ElevenLabs ${tracker.elevenlabs_cost_usd:.4f} ({tracker.elevenlabs_calls} llamadas)"
+        )

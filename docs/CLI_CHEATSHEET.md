@@ -47,6 +47,19 @@ Regenerar una tarjeta puntual sin pasar por flags:
 regenerate --word <hanzi> --type <sentence|pattern|audio> [--hsk-level 3]
 ```
 
+## Casos difíciles (`needs_human`)
+
+Cuando una tarjeta agota el tope de reintentos (`regenerate --flagged` no puede arreglarla sola), hay dos herramientas según la causa real — revisa primero qué generaron las otras 2 tarjetas de la misma palabra para diagnosticar cuál aplica:
+
+```
+swap-primary --word <hanzi> --meaning "<texto parcial>" [--regenerate] [--hsk-level 3]
+manual-card  --word <hanzi> --type <sentence|pattern|audio> --zh "<oración>" --es "<traducción>" [--hsk-level 3]
+```
+
+- **`swap-primary`**: para cuando `word_prep` le asignó como significado primario una acepción que no es como la palabra realmente se usa (ej. 把 = "agarrar" cuando el uso real dominante es la partícula gramatical del 把字句, ya registrada como secundaria). Busca la lectura cuyo `meaning_es` contiene el texto dado y la promueve a primaria; con `--regenerate` corre el pipeline normal (LLM + guardrail, con reintentos) en las 3 tarjetas usando ya la lectura corregida — normalmente basta, sin necesitar más intervención.
+- **`manual-card`**: para cuando la palabra genuinamente no tiene una forma natural e independiente de aparecer (morfemas casi siempre atados a un compuesto, ej. 乐, 冬, 报, 保 — ningún significado la salva). Tú escribes la oración china + traducción ya aprobadas; el LLM SOLO hace el desglose palabra por palabra (no toca la oración), sin pasar por ningún guardrail. Para PatternCard, si el LLM no logra aislar la palabra objetivo como su propio token del desglose (necesario para ubicar el hueco), lo separa a mano automáticamente — nunca falla en silencio.
+- Ambos imprimen el costo desglosado (LLM/ElevenLabs) al final, igual que `generate`/`regenerate --flagged`.
+
 ## Diagnóstico
 
 ```
@@ -54,7 +67,7 @@ dashboard    [--hsk-level N]
 clean-audio  [--yes]
 ```
 
-- **`dashboard`**: tarjetas por estado/`review_status`, quién falla guardrails y por qué, quién está flaggeado/escalado, palabras atascadas en `word_prep`, resumen de audio huérfano.
+- **`dashboard`**: tarjetas por estado/`review_status`/`content_source` (`llm` vs `manual`, solo se muestra si hay alguna manual), quién falla guardrails y por qué, quién está flaggeado/escalado, palabras atascadas en `word_prep`, resumen de audio huérfano.
 - **`clean-audio`**: borra archivos de audio en `resources/audios/` que ya nadie referencia (por defecto solo muestra qué borraría — hace falta `--yes` para borrar de verdad).
 
 ## Legacy
