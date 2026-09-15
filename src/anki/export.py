@@ -14,6 +14,7 @@ campos de la nota a mano (ver memoria project-manual-review-workflow).
 
 import argparse
 import json
+import random
 from pathlib import Path
 from typing import Optional
 
@@ -25,17 +26,37 @@ from src.utils.frequency import get_freq_bucket
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DECK_PREFIX = "ChinoSRS"
 
+# Bucket -> prioridad numérica para SortKey/ORDER BY. Igual que el pipeline
+# viejo (src/csv_to_anki.py, ya borrado): agrupar por bucket ancho (~1000+
+# palabras) y desordenar ADENTRO del bucket, no por rango exacto — si se
+# ordenara por rango exacto, las 3 tarjetas de una misma palabra (que
+# comparten el mismo frequency_rank) siempre quedarían consecutivas. Con un
+# bucket de este tamaño, la chance de que las 3 hermanas caigan juntas es
+# baja (igual que en el sistema viejo — no es una garantía dura, es la
+# misma tolerancia que ya se aceptaba antes).
+_FREQ_BUCKET_ORDER = {"top1k": 0, "top3k": 1, "top5k": 2, "top10k": 3, "rare": 4}
+_FREQ_BUCKET_SQL_CASE = """
+    CASE
+        WHEN w.frequency_rank IS NULL THEN 9
+        WHEN w.frequency_rank <= 1000 THEN 0
+        WHEN w.frequency_rank <= 3000 THEN 1
+        WHEN w.frequency_rank <= 5000 THEN 2
+        WHEN w.frequency_rank <= 10000 THEN 3
+        ELSE 4
+    END
+"""
+
 
 def deck_name_for(hsk_level: int) -> str:
     return f"{DECK_PREFIX} - HSK{hsk_level}"
 
 
-def _sort_key(frequency_rank: Optional[int], word_id: int) -> str:
+def _sort_key(frequency_rank: Optional[int]) -> str:
     """Primer campo del modelo -> Anki lo usa como Sort Field por defecto.
-    Con rango de frecuencia, ordena por frecuencia; sin rango, cae al final
-    (ordenado por word_id) en vez de mezclarse al principio."""
-    rank = frequency_rank if frequency_rank else 900000 + word_id
-    return f"{rank:06d}"
+    bucket (2 dígitos) + aleatorio (4 dígitos), para que el Browser ordene
+    igual que como se crearon las notas (ver _FREQ_BUCKET_SQL_CASE)."""
+    bucket_code = _FREQ_BUCKET_ORDER.get(get_freq_bucket(frequency_rank), 9)
+    return f"{bucket_code:02d}{random.randint(0, 9999):04d}"
 
 
 def _fetch_word(conn, word_id: int) -> dict:
@@ -103,7 +124,7 @@ def _build_fields(conn, media_cache: dict, word: dict, card_id: int, card_type: 
     audio_word_file = _upload_audio(media_cache, word_audio["file_path"])
 
     common = {
-        "SortKey": _sort_key(word["frequency_rank"], word["id"]),
+        "SortKey": _sort_key(word["frequency_rank"]),
         "Hanzi": word["hanzi"],
         "HskLevel": str(word["hsk_level"]),
         "FreqBucket": get_freq_bucket(word["frequency_rank"]) or "",
@@ -147,11 +168,11 @@ def export_pending(hsk_level: int = 3, limit: Optional[int] = None) -> dict:
 
     with get_connection() as conn:
         rows = conn.execute(
-            """
+            f"""
             SELECT c.id AS card_id, c.card_type, c.anki_note_id, c.word_id
             FROM cards c JOIN words w ON w.id = c.word_id
             WHERE c.status = 'ready' AND w.hsk_level = ?
-            ORDER BY c.word_id, c.card_type
+            ORDER BY {_FREQ_BUCKET_SQL_CASE}, RANDOM()
             """,
             (hsk_level,),
         ).fetchall()
