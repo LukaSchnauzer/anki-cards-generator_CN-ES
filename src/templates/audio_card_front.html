@@ -1,14 +1,94 @@
-<div style="font-family: 'Segoe UI', Arial, sans-serif; padding: 40px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; text-align:center; min-height: 150px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
-{{#Audio}}<audio controls autoplay src="{{Audio}}" style="margin: 20px 0;"></audio>{{/Audio}}
-{{^Audio}}<div style="font-size:64px; margin:20px 0; opacity: 0.7;">&#x1F50A;</div><div style="color:white; font-size: 18px; opacity: 0.9;">Escucha y reconoce la palabra</div>{{/Audio}}
+<div class="cs-card" id="csCard">
+  <div class="card-top-row">
+    <div class="badges">
+      <span class="badge accent">HSK{{HskLevel}}</span>
+      <span class="badge" id="freqBadge"></span>
+    </div>
+  </div>
+
+  <div class="spacer-flex"></div>
+
+  <div class="audio-circles">
+    <button class="circle-btn circle-big" id="btnNormal" type="button" aria-label="播放"></button>
+    <div class="circle-slow-wrap">
+      <button class="circle-btn circle-small" id="btnSlow" type="button" aria-label="慢速播放"></button>
+      <span class="circle-caption">慢</span>
+    </div>
+  </div>
+
+  <div class="spacer-flex"></div>
+
+  <div class="hints" id="hints"></div>
+  <div class="row-controls">
+    <button class="pill-btn" id="btnHint1" type="button">提示 1 · 关键词</button>
+    <button class="pill-btn" id="btnHint2" type="button" style="display:none;">提示 2 · 意思</button>
+  </div>
+
+  <p class="footline" id="footline">听录音，理解意思</p>
 </div>
-<div style="margin-top:16px; text-align:center;">
-  {{#Hint1}}<a href="#" id="h1" onclick="document.getElementById('hint1').style.display='block'; this.style.display='none'; return false;" style="color:#667eea; text-decoration:none; font-size:13px; padding: 6px 14px; border: 2px solid #667eea; border-radius: 16px; display: inline-block; margin: 4px;">Pista 1</a>
-  <div id="hint1" onclick="this.style.display='none'; document.getElementById('h1').style.display='inline-block';" style="display:none; margin-top:10px; font-size:13px; color:#555; padding:10px; background:#f8f9fa; border-left: 3px solid #667eea; border-radius:4px; text-align:left; cursor:pointer;">{{Hint1}}</div>{{/Hint1}}
-  {{#Hint2}}<a href="#" id="h2" onclick="document.getElementById('hint2').style.display='block'; this.style.display='none'; return false;" style="color:#764ba2; text-decoration:none; font-size:13px; padding: 6px 14px; border: 2px solid #764ba2; border-radius: 16px; display: inline-block; margin: 4px;">Pista 2</a>
-  <div id="hint2" onclick="this.style.display='none'; document.getElementById('h2').style.display='inline-block';" style="display:none; margin-top:10px; font-size:13px; color:#555; padding:10px; background:#f8f9fa; border-left: 3px solid #764ba2; border-radius:4px; text-align:left; cursor:pointer;">{{Hint2}}</div>{{/Hint2}}
-  {{#Hint3}}<a href="#" id="h3" onclick="document.getElementById('hint3').style.display='block'; this.style.display='none'; return false;" style="color:#11998e; text-decoration:none; font-size:13px; padding: 6px 14px; border: 2px solid #11998e; border-radius: 16px; display: inline-block; margin: 4px;">Pista 3</a>
-  <div id="hint3" onclick="this.style.display='none'; document.getElementById('h3').style.display='inline-block';" style="display:none; margin-top:10px; font-size:13px; color:#555; padding:10px; background:#f8f9fa; border-left: 3px solid #11998e; border-radius:4px; text-align:left; cursor:pointer;">{{Hint3}}</div>{{/Hint3}}
-  {{#Hint4}}<a href="#" id="h4" onclick="document.getElementById('hint4').style.display='block'; this.style.display='none'; return false;" style="color:#e74c3c; text-decoration:none; font-size:13px; padding: 6px 14px; border: 2px solid #e74c3c; border-radius: 16px; display: inline-block; margin: 4px;">Pista 4</a>
-  <div id="hint4" onclick="this.style.display='none'; document.getElementById('h4').style.display='inline-block';" style="display:none; margin-top:10px; font-size:14px; color:#555; padding:12px; background:#fff5f5; border-left: 3px solid #e74c3c; border-radius:4px; text-align:left; cursor:pointer;">{{Hint4}}</div>{{/Hint4}}
-</div>
+
+<audio id="audioNormal" src="{{AudioSentenceNormalFile}}"></audio>
+<audio id="audioSlow" src="{{AudioSentenceSlowFile}}"></audio>
+
+<script>
+(function () {
+  const PLAY_BIG = '<svg viewBox="0 0 24 24" width="30" height="30" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+  const PLAY_SMALL = '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+  const FREQ_LABELS = { top1k: 'Top 1000', top3k: 'Top 3000', top5k: 'Top 5000', top10k: 'Top 10 000', rare: '低频' };
+
+  const HANZI = "{{Hanzi}}";
+  const PRIMARY_ZH = "{{PrimaryMeaningZh}}";
+  const FREQ_BUCKET = "{{FreqBucket}}";
+
+  document.getElementById('freqBadge').textContent = FREQ_LABELS[FREQ_BUCKET] || FREQ_BUCKET;
+  document.getElementById('btnNormal').innerHTML = PLAY_BIG;
+  document.getElementById('btnSlow').innerHTML = PLAY_SMALL;
+
+  let hint1Revealed = false;
+  let hint2Revealed = false;
+
+  const audioNormal = document.getElementById('audioNormal');
+  const audioSlow = document.getElementById('audioSlow');
+  const btnNormal = document.getElementById('btnNormal');
+  const btnSlow = document.getElementById('btnSlow');
+  const hintsEl = document.getElementById('hints');
+  const btnHint1 = document.getElementById('btnHint1');
+  const btnHint2 = document.getElementById('btnHint2');
+  const footline = document.getElementById('footline');
+
+  [audioNormal, audioSlow].forEach((a, idx) => {
+    const circle = idx === 0 ? btnNormal : btnSlow;
+    a.addEventListener('play', () => {
+      [audioNormal, audioSlow].forEach(other => { if (other !== a && !other.paused) other.pause(); });
+      circle.classList.add('is-playing');
+    });
+    a.addEventListener('pause', () => circle.classList.remove('is-playing'));
+    a.addEventListener('ended', () => circle.classList.remove('is-playing'));
+  });
+
+  btnNormal.addEventListener('click', () => { audioNormal.currentTime = 0; audioNormal.play(); });
+  btnSlow.addEventListener('click', () => { audioSlow.currentTime = 0; audioSlow.play(); });
+
+  function renderHints() {
+    let html = '';
+    if (hint1Revealed) html += '<div class="target-reveal">' + HANZI + '</div>';
+    if (hint2Revealed) html += '<div class="hint-box">' + PRIMARY_ZH + '</div>';
+    hintsEl.innerHTML = html;
+    btnHint1.classList.toggle('on', hint1Revealed);
+    btnHint2.classList.toggle('on', hint2Revealed);
+    btnHint2.style.display = hint1Revealed ? 'inline-flex' : 'none';
+    footline.innerHTML = hint1Revealed
+      ? '这句话里 <b style="color:var(--accent)">' + HANZI + '</b> 是什么意思？'
+      : '听录音，理解意思';
+  }
+
+  btnHint1.addEventListener('click', () => {
+    hint1Revealed = !hint1Revealed;
+    if (!hint1Revealed) hint2Revealed = false; // ocultar la 1 oculta también la 2, que depende de ella
+    renderHints();
+  });
+  btnHint2.addEventListener('click', () => { hint2Revealed = !hint2Revealed; renderHints(); });
+
+  renderHints();
+})();
+</script>

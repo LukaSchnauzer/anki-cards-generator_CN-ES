@@ -1,28 +1,31 @@
-/* ChinoSRS — SentenceCard. Acento: teal (identidad de este tipo de tarjeta). */
+/* ChinoSRS — AudioCard. Acento: violeta (identidad de este tipo de tarjeta,
+   distinto del teal de SentenceCard y el ámbar de PatternCard). */
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
 
 * { -webkit-tap-highlight-color: transparent !important; }
 
 :root {
-  --paper: #f3f4f1;
+  --paper: #f1eef6;
   --card: #ffffff;
-  --ink: #20272a;
-  --ink-muted: #5b6a66;
-  --divider: #dadfda;
-  --accent: #1d6e73;
-  --accent-wash: rgba(29, 110, 115, 0.10);
-  --accent-wash-strong: rgba(29, 110, 115, 0.20);
+  --ink: #241f2e;
+  --ink-muted: #6a6178;
+  --divider: #ddd6e8;
+  --accent: #6b4fa0;
+  --accent-ink: #ffffff;
+  --accent-wash: rgba(107, 79, 160, 0.10);
+  --accent-wash-strong: rgba(107, 79, 160, 0.20);
 }
 
 .nightMode {
-  --paper: #12181a;
-  --card: #182022;
-  --ink: #e7ecea;
-  --ink-muted: #93a19d;
-  --divider: #263230;
-  --accent: #4fb8be;
-  --accent-wash: rgba(79, 184, 190, 0.14);
-  --accent-wash-strong: rgba(79, 184, 190, 0.26);
+  --paper: #17141d;
+  --card: #1e1a26;
+  --ink: #e9e5f0;
+  --ink-muted: #a89fbb;
+  --divider: #2e2839;
+  --accent: #c3aef0;
+  --accent-ink: #17141d;
+  --accent-wash: rgba(195, 174, 240, 0.16);
+  --accent-wash-strong: rgba(195, 174, 240, 0.28);
 }
 
 .card {
@@ -43,6 +46,7 @@
   flex-direction: column;
   gap: 18px;
   text-align: left;
+  min-height: 260px;
 }
 
 .card-top-row {
@@ -95,16 +99,72 @@ button.badge-toggle.on {
   background: var(--accent-wash);
 }
 
-.sentence-zh, .sentence-back {
+.audio-circles {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: 6px 0;
+}
+
+.circle-slow-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+
+.circle-btn {
+  all: unset;
+  -webkit-appearance: none;
+  appearance: none;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  overflow: hidden;
+  cursor: pointer;
+  transition: box-shadow 160ms ease, background 160ms ease;
+}
+
+.circle-big {
+  width: 78px;
+  height: 78px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-ink);
+  box-shadow: 0 3px 14px var(--accent-wash-strong);
+}
+
+.circle-big.is-playing { box-shadow: 0 0 0 9px var(--accent-wash); }
+
+.circle-small {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: var(--card);
+  border: 2px solid var(--accent);
+  color: var(--accent);
+}
+
+.circle-small.is-playing { background: var(--accent-wash-strong); }
+
+.circle-caption {
+  font-family: 'IBM Plex Mono', 'Noto Sans SC', monospace;
+  font-size: 11px;
+  color: var(--ink-muted);
+}
+
+.sentence-back {
   font-family: 'Noto Sans SC', sans-serif;
   text-align: center;
   line-height: 1.6;
+  font-size: 21px;
+  font-weight: 600;
 }
 
-.sentence-zh { font-size: 30px; font-weight: 600; }
-.sentence-back { font-size: 21px; font-weight: 600; }
-
-.sentence-zh rt, .sentence-back rt {
+.sentence-back rt {
   font-family: 'IBM Plex Mono', monospace;
   font-size: 0.4em;
   font-weight: 500;
@@ -118,6 +178,14 @@ button.badge-toggle.on {
   color: var(--accent);
   border-bottom: 2px solid var(--accent);
   padding: 0 1px;
+}
+
+.target-reveal {
+  font-family: 'Noto Sans SC', sans-serif;
+  font-size: 40px;
+  font-weight: 700;
+  text-align: center;
+  color: var(--accent);
 }
 
 .sb-word {
@@ -165,11 +233,12 @@ button.badge-toggle.on {
   border-radius: 10px;
   padding: 10px 14px;
   font-family: 'Noto Sans SC', sans-serif;
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 600;
   color: var(--ink);
 }
 
+.spacer-flex { flex: 1; }
 .footline { text-align: center; color: var(--ink-muted); font-size: 13px; }
 
 .back-head { display: flex; align-items: baseline; gap: 14px; justify-content: center; }
@@ -208,7 +277,7 @@ button.badge-toggle.on {
 .disclose-summary .caret { font-size: 10px; transition: transform 180ms ease; display: inline-block; }
 .disclose-summary.open .caret { transform: rotate(90deg); }
 .disclose-panel { max-height: 0; overflow: hidden; transition: max-height 260ms ease; }
-.disclose-panel.open { max-height: 640px; }
+.disclose-panel.open { max-height: 720px; }
 .disclose-panel-inner { padding-top: 10px; }
 
 .breakdown-table { margin-top: 10px; display: flex; flex-direction: column; gap: 2px; }

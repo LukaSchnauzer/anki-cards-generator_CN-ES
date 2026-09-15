@@ -73,18 +73,21 @@ def create_model_audio(force_recreate: bool = False):
         return
 
     fields = [
-        "SortKey", "Hanzi", "Pinyin", "Meaning", "SentenceCN", "SentenceES", "Tips",
-        "POS", "Register", "Frecuencia", "Tags", "Audio", "WordAudio",
-        "Hint1", "Hint2", "Hint3", "Hint4"
+        "SortKey", "Hanzi", "HskLevel", "FreqBucket",
+        "PrimaryPinyin", "PrimaryMeaningEs", "PrimaryMeaningZh",
+        "ExampleZh", "ExampleEs",
+        "BreakdownJson", "SecondariesJson", "CollocationsJson",
+        "AudioWordFile", "AudioSentenceNormalFile", "AudioSentenceSlowFile",
+        "SentenceAlignmentNormalJson", "SentenceAlignmentSlowJson",
     ]
-    
+
     templates = [{
         "Name": "ChinoSRS_AudioCard",
         "Front": load_template("audio_card_front.html"),
         "Back": load_template("audio_card_back.html")
     }]
-    
-    css = ""
+
+    css = load_template("audio_card.css")
     post("createModel", modelName=model_name, inOrderFields=fields, cardTemplates=templates, css=css)
 
 
