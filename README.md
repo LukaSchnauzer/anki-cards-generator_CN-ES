@@ -214,3 +214,7 @@ Creado con asistencia de IA generativa (Claude Code).
 ## Soporte
 
 Para preguntas o problemas, abre un issue en GitHub.
+
+## Licencia
+
+MIT — ver [LICENSE](LICENSE). El vocabulario fuente ([Complete HSK Vocabulary](https://github.com/drkameleon/complete-hsk-vocabulary)) también es MIT.
