@@ -17,6 +17,7 @@ de verdad domina el uso real."""
 import argparse
 
 from src.db.database import get_connection, init_db
+from src.generation.graph import ensure_word_audio
 from src.generation.regenerate import regenerate_card
 from src.utils.cost_tracker import get_tracker
 
@@ -49,6 +50,13 @@ def add_reading(
             (word_id, pinyin, 1 if make_primary else 0, meaning_es, meaning_zh, register),
         )
         new_id = cur.lastrowid
+
+    if make_primary:
+        # Lectura recién creada -> nunca tuvo audio de palabra generado (eso
+        # se genera por reading_id durante `generate`, y esta lectura no
+        # existía todavía). Sin esto, export fallaba con "no tiene audio de
+        # palabra" para las 3 tarjetas (encontrado en vivo con 系).
+        ensure_word_audio(word_id)
 
     return {
         "new_reading_id": new_id,
@@ -91,9 +99,13 @@ if __name__ == "__main__":
             for card_type in CARD_TYPES:
                 ok = regenerate_card(word["id"], card_type)
                 print(f"  [{'OK' if ok else 'FAIL'}] {card_type}")
-            tracker = get_tracker()
-            print(
-                f"Costo estimado: ${tracker.total_cost_usd:.4f}"
-                f"  ·  LLM ${tracker.llm_cost_usd:.4f} ({tracker.llm_calls} llamadas)"
-                f"  ·  ElevenLabs ${tracker.elevenlabs_cost_usd:.4f} ({tracker.elevenlabs_calls} llamadas)"
-            )
+
+        # add_reading ya puede haber gastado en ElevenLabs (ensure_word_audio
+        # corre siempre que la nueva lectura se vuelve primaria), aunque no
+        # se haya pedido --regenerate.
+        tracker = get_tracker()
+        print(
+            f"Costo estimado: ${tracker.total_cost_usd:.4f}"
+            f"  ·  LLM ${tracker.llm_cost_usd:.4f} ({tracker.llm_calls} llamadas)"
+            f"  ·  ElevenLabs ${tracker.elevenlabs_cost_usd:.4f} ({tracker.elevenlabs_calls} llamadas)"
+        )

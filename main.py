@@ -71,6 +71,14 @@ def run_command(cmd, description):
     except FileNotFoundError:
         print_error(f"Command not found. Make sure Python is in your PATH.")
         return False
+    except KeyboardInterrupt:
+        # En Windows, Ctrl+C manda CTRL_C_EVENT a TODO el grupo de procesos —
+        # llega al hijo (que ya debería estar parando solo, con su propio
+        # resumen) Y al padre, que estaba bloqueado en subprocess.run().wait().
+        # Sin este except, ese wait() interrumpido tira un traceback crudo acá
+        # mismo en main.py — este mensaje es lo único que se ve en cambio.
+        print_error(f"Interrupted: {description}")
+        return False
 
 
 def get_python_cmd():

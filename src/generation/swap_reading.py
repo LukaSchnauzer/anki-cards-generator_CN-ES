@@ -11,6 +11,7 @@ opcionalmente las regenera de una vez (--regenerate).
 import argparse
 
 from src.db.database import get_connection, init_db
+from src.generation.graph import ensure_word_audio
 from src.generation.regenerate import regenerate_card
 from src.utils.cost_tracker import get_tracker
 
@@ -46,6 +47,12 @@ def swap_primary_reading(word_id: int, meaning_query: str) -> dict:
         conn.execute("UPDATE readings SET is_primary = 0 WHERE word_id = ? AND is_primary = 1", (word_id,))
         conn.execute("UPDATE readings SET is_primary = 1 WHERE id = ?", (new_primary["id"],))
 
+    # El audio de palabra está atado a reading_id, no a word_id — si esta
+    # lectura nunca fue primaria antes (el caso típico acá), nunca tuvo su
+    # propio audio generado. Sin esto, export fallaba con "no tiene audio
+    # de palabra" para las 3 tarjetas (encontrado en vivo: 把/所/架/较/顿).
+    ensure_word_audio(word_id)
+
     return {
         "changed": True,
         "old_primary_meaning": old_primary["meaning_es"] if old_primary else None,
@@ -79,6 +86,10 @@ if __name__ == "__main__":
             for card_type in CARD_TYPES:
                 ok = regenerate_card(word["id"], card_type)
                 print(f"  [{'OK' if ok else 'FAIL'}] {card_type}")
+
+        # swap_primary_reading ya puede haber gastado en ElevenLabs (ensure_word_audio),
+        # aunque no se haya pedido --regenerate — imprimir siempre que se cambió algo.
+        if result["changed"]:
             tracker = get_tracker()
             print(
                 f"Costo estimado: ${tracker.total_cost_usd:.4f}"

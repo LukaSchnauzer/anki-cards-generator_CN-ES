@@ -116,62 +116,81 @@ def run_audit(hsk_level: int = None, model: str = GUARDRAIL_MODEL, batch_size: i
 
     audited = 0
     flagged = 0
-    with Progress(
-        TextColumn("[bold cyan]{task.fields[label]}"),
-        BarColumn(bar_width=28),
-        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-        TextColumn("({task.completed}/{task.total} lotes)"),
-        TimeElapsedColumn(),
-        TextColumn("ETA"),
-        TimeRemainingColumn(),
-        TextColumn(
-            "[green]LLM ${task.fields[llm_cost]:.3f}[/green]  "
-            "[bold white]tot ${task.fields[total_cost]:.3f}[/bold white]  "
-            "[yellow]marcadas {task.fields[flagged]}[/yellow]"
-        ),
-        console=console,
-    ) as progress:
-        task = progress.add_task(
-            "auditando", total=total_batches, label="iniciando…",
-            llm_cost=0.0, total_cost=0.0, flagged=0,
-        )
-
-        for i in range(0, len(candidates), batch_size):
-            batch = candidates[i:i + batch_size]
-            batch_num = i // batch_size + 1
-            progress.update(task, label=f"lote {batch_num}/{total_batches} ({batch[0]['hanzi']}…{batch[-1]['hanzi']})")
-
-            results = _audit_batch([dict(row) for row in batch], model=model)
-            audited += len(batch)
-            with get_connection() as conn:
-                for row in batch:
-                    r = results.get(str(row["card_id"]))
-                    if r is None:
-                        console.print(f"  (aviso: sin resultado para {row['hanzi']} {row['card_type']} card_id={row['card_id']} — se deja como está)")
-                        continue
-                    if not r.natural:
-                        conn.execute(
-                            "UPDATE cards SET review_status = 'needs_human', review_notes = ?, updated_at = datetime('now') WHERE id = ?",
-                            (f"[audit-naturalness] {r.reason}", row["card_id"]),
-                        )
-                        flagged += 1
-                        console.print(f"  [yellow][FLAG][/yellow] {row['hanzi']} ({row['card_type']}): {row['example_zh']} — {r.reason}")
-
-            progress.update(
-                task, advance=1, llm_cost=tracker.llm_cost_usd, total_cost=tracker.total_cost_usd, flagged=flagged,
+    interrupted = False
+    try:
+        with Progress(
+            TextColumn("[bold cyan]{task.fields[label]}"),
+            BarColumn(bar_width=28),
+            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+            TextColumn("({task.completed}/{task.total} lotes)"),
+            TimeElapsedColumn(),
+            TextColumn("ETA"),
+            TimeRemainingColumn(),
+            TextColumn(
+                "[green]LLM ${task.fields[llm_cost]:.3f}[/green]  "
+                "[bold white]tot ${task.fields[total_cost]:.3f}[/bold white]  "
+                "[yellow]marcadas {task.fields[flagged]}[/yellow]"
+            ),
+            console=console,
+        ) as progress:
+            task = progress.add_task(
+                "auditando", total=total_batches, label="iniciando…",
+                llm_cost=0.0, total_cost=0.0, flagged=0,
             )
 
-    return {"audited": audited, "flagged": flagged}
+            for i in range(0, len(candidates), batch_size):
+                batch = candidates[i:i + batch_size]
+                batch_num = i // batch_size + 1
+                progress.update(task, label=f"lote {batch_num}/{total_batches} ({batch[0]['hanzi']}…{batch[-1]['hanzi']})")
+
+                results = _audit_batch([dict(row) for row in batch], model=model)
+                audited += len(batch)
+                with get_connection() as conn:
+                    for row in batch:
+                        r = results.get(str(row["card_id"]))
+                        if r is None:
+                            console.print(f"  (aviso: sin resultado para {row['hanzi']} {row['card_type']} card_id={row['card_id']} — se deja como está)")
+                            continue
+                        if not r.natural:
+                            conn.execute(
+                                "UPDATE cards SET review_status = 'needs_human', review_notes = ?, updated_at = datetime('now') WHERE id = ?",
+                                (f"[audit-naturalness] {r.reason}", row["card_id"]),
+                            )
+                            flagged += 1
+                            console.print(f"  [yellow][FLAG][/yellow] {row['hanzi']} ({row['card_type']}): {row['example_zh']} — {r.reason}")
+
+                progress.update(
+                    task, advance=1, llm_cost=tracker.llm_cost_usd, total_cost=tracker.total_cost_usd, flagged=flagged,
+                )
+    except KeyboardInterrupt:
+        # Cada lote escribe sus flags a SQLite apenas responde el LLM — un
+        # Ctrl+C a mitad de un lote pierde como máximo ESE lote (nada
+        # corrupto, solo se re-audita si se vuelve a correr). El resto de
+        # lotes ya escritos se quedan igual.
+        interrupted = True
+        console.print(
+            f"\n[yellow]Interrumpido — {audited}/{len(candidates)} tarjetas auditadas, {flagged} marcadas, antes de parar. "
+            f"Volvé a correr `audit-naturalness` para seguir (no repite lo ya marcado).[/yellow]"
+        )
+
+    return {"audited": audited, "flagged": flagged, "interrupted": interrupted}
 
 
 if __name__ == "__main__":
+    import sys
+
     init_db()
     parser = argparse.ArgumentParser(description="Audita naturalidad de tarjetas ready/llm de palabras de 1 carácter")
     parser.add_argument("--hsk-level", type=int, default=None, help="Filtra por nivel HSK (default: todos)")
     parser.add_argument("--batch-size", type=int, default=BATCH_SIZE)
     args = parser.parse_args()
 
-    summary = run_audit(hsk_level=args.hsk_level, batch_size=args.batch_size)
+    try:
+        summary = run_audit(hsk_level=args.hsk_level, batch_size=args.batch_size)
+    except KeyboardInterrupt:
+        print("\nInterrumpido antes de empezar — nada que reportar.")
+        sys.exit(130)
+
     print(f"\nAuditadas: {summary['audited']}  ·  Marcadas needs_human: {summary['flagged']}")
     tracker = get_tracker()
     print(
@@ -179,3 +198,5 @@ if __name__ == "__main__":
         f"  ·  LLM ${tracker.llm_cost_usd:.4f} ({tracker.llm_calls} llamadas)"
         f"  ·  ElevenLabs ${tracker.elevenlabs_cost_usd:.4f} ({tracker.elevenlabs_calls} llamadas)"
     )
+    if summary.get("interrupted"):
+        sys.exit(130)

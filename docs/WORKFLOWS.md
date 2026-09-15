@@ -2,6 +2,21 @@
 
 Explicaciones detalladas, criterios de "cuándo usar cada herramienta" y ejemplos completos. Para la sintaxis rápida de cada comando, ver **[CLI_CHEATSHEET.md](CLI_CHEATSHEET.md)**.
 
+## Interrupciones (Ctrl+C)
+
+Todos los comandos largos son **resumibles**: cada palabra/tarjeta/lote se comitea a SQLite apenas termina, así que interrumpir nunca deja nada corrupto — como mucho, se pierde lo que estaba a medias en ESE ítem puntual, y volver a correr el mismo comando retoma el resto (todos son idempotentes: no duplican ni repiten lo ya hecho, salvo la salvedad de `manual-card-batch` que se explica abajo).
+
+| Comando | Para limpio (sin traceback) | Si se interrumpe a medias |
+|---|---|---|
+| `generate` | Sí | La palabra en curso puede quedar con algunas tarjetas listas y otras `pending` — normal, se retoman solas |
+| `regenerate --flagged` | Sí | El word_prep/tarjeta en curso se pierde, el resto ya procesado queda bien |
+| `audit-naturalness` | Sí | Como mucho se re-audita 1 lote (~15 tarjetas) que estaba a medias — no vuelve a marcar lo ya marcado |
+| `manual-card-batch` | Sí | La entrada en curso puede quedar a medio guardar — correr el mismo JSON de nuevo es seguro (sobreescribe, no duplica) |
+| `export` | Sí | La tarjeta en curso no queda con `anki_note_id` puesto si no llegó a confirmarse — se reintenta sola en la siguiente corrida |
+| `load`, `flag-batch`, `swap-primary`, `add-reading`, `edit-reading`, `unflag`, `regenerate --word/--type`, `inspect-word`, `dashboard`, `clean-audio` | N/A | Son operaciones cortas (segundos, pocas llamadas) — el riesgo de una interrupción a medias es bajo y no tienen manejo especial |
+
+Esto se maneja en dos capas: cada script largo atrapa `KeyboardInterrupt` internamente e imprime cuánto alcanzó a hacer antes de parar, Y `main.py` (en `run_command()`) también lo atrapa alrededor del subproceso — en Windows, Ctrl+C manda la señal a todo el grupo de procesos (padre Y el hijo a la vez), así que sin la capa del padre se veía un traceback ahí aunque el hijo ya hubiera parado bien.
+
 ## Flujo normal
 
 - **`load`**: siembra palabras del JSON fuente en SQLite (idempotente). `--hsk-level 0` carga todo el diccionario sin filtrar (rara vez se quiere esto).

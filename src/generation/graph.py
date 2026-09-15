@@ -131,6 +131,42 @@ def _log_audio_phase(word_id: int, phase: str, status: str, notes: str = "") -> 
         )
 
 
+def ensure_word_audio(word_id: int) -> bool:
+    """Genera el audio de la LECTURA PRIMARIA ACTUAL de la palabra si le
+    falta — idempotente, misma lógica que word_audio_node pero llamable
+    directo (sin pasar por el grafo), para usar después de swap-primary /
+    add-reading. El audio de palabra está atado a `reading_id`, no a
+    `word_id`: si la lectura primaria cambia (una que nunca fue primaria en
+    `generate` nunca tuvo su propio audio generado), export fallaba con
+    "no tiene audio de palabra" hasta que algo llamara esto para la lectura
+    nueva. No hace falta que el caller sepa si hacía falta o no."""
+    with get_connection() as conn:
+        word = conn.execute("SELECT hanzi FROM words WHERE id = ?", (word_id,)).fetchone()
+        primary = conn.execute(
+            "SELECT * FROM readings WHERE word_id = ? AND is_primary = 1", (word_id,)
+        ).fetchone()
+        if primary is None:
+            return False
+        already = conn.execute(
+            "SELECT 1 FROM audio_files WHERE reading_id = ? AND speed = 'slow'", (primary["id"],)
+        ).fetchone()
+    if already:
+        return True
+
+    voice_id = voice_id_for_word(word_id)
+    try:
+        path, alignment = generate_tts_file(word["hanzi"], speed="slow", prefix="word_", voice_id=voice_id)
+    except AudioGenError as ex:
+        _log_audio_phase(word_id, "word_audio", "failed", str(ex))
+        return False
+
+    with get_connection() as conn:
+        save_audio_file(
+            conn, scope="word", reading_id=primary["id"], speed="slow", engine=DEFAULT_ENGINE, file_path=path, alignment=alignment
+        )
+    return True
+
+
 def word_audio_node(state: WordPipelineState) -> dict:
     """Audio de la palabra sola (solo lectura principal) — una vez por palabra,
     reutilizado por las 3 tarjetas vía reading_id.
@@ -140,28 +176,8 @@ def word_audio_node(state: WordPipelineState) -> dict:
     bien; acá no hay ejercicio de comprensión atado, solo sirve para
     escuchar la pronunciación con claridad.
     """
-    with get_connection() as conn:
-        primary = conn.execute(
-            "SELECT * FROM readings WHERE word_id = ? AND is_primary = 1", (state["word_id"],)
-        ).fetchone()
-        already = conn.execute(
-            "SELECT 1 FROM audio_files WHERE reading_id = ? AND speed = 'slow'", (primary["id"],)
-        ).fetchone()
-    if already:
-        return {"word_audio_ok": True}
-
-    voice_id = voice_id_for_word(state["word_id"])
-    try:
-        path, alignment = generate_tts_file(state["hanzi"], speed="slow", prefix="word_", voice_id=voice_id)
-    except AudioGenError as ex:
-        _log_audio_phase(state["word_id"], "word_audio", "failed", str(ex))
-        return {"word_audio_ok": False}
-
-    with get_connection() as conn:
-        save_audio_file(
-            conn, scope="word", reading_id=primary["id"], speed="slow", engine=DEFAULT_ENGINE, file_path=path, alignment=alignment
-        )
-    return {"word_audio_ok": True}
+    ok = ensure_word_audio(state["word_id"])
+    return {"word_audio_ok": ok}
 
 
 def card_audio_node(word_id: int, card_type: str, phase: str, slow_too: bool = False) -> bool:
@@ -343,88 +359,105 @@ def run_pending_words(limit: Optional[int] = None) -> int:
     attempted_cards = 0  # tarjetas que salieron de 'pending' en ESTA corrida (ready o guardrail_failed)
     failed_cards = 0  # de esas, cuántas agotaron sus reintentos (guardrail_failed)
 
-    with Progress(
-        TextColumn("[bold cyan]{task.fields[label]}"),
-        BarColumn(bar_width=28),
-        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-        TextColumn("({task.completed}/{task.total})"),
-        TimeElapsedColumn(),
-        TextColumn("ETA"),
-        TimeRemainingColumn(),
-        TextColumn(
-            "[green]LLM ${task.fields[llm_cost]:.3f}[/green]  "
-            "[magenta]11L ${task.fields[el_cost]:.3f}[/magenta]  "
-            "[bold white]tot ${task.fields[total_cost]:.3f}[/bold white]  "
-            "[red]agotadas {task.fields[fail_pct]:.1f}%[/red]"
-        ),
-        console=console,
-    ) as progress:
-        task = progress.add_task(
-            "generando",
-            total=len(pending) or 1,
-            label="iniciando…",
-            llm_cost=0.0,
-            el_cost=0.0,
-            total_cost=0.0,
-            fail_pct=0.0,
-        )
-
-        for w in pending:
-            with get_connection() as conn:
-                reading = conn.execute("SELECT pinyin FROM readings WHERE word_id = ? LIMIT 1", (w["id"],)).fetchone()
-                pending_types = [
-                    r["card_type"]
-                    for r in conn.execute(
-                        "SELECT card_type FROM cards WHERE word_id = ? AND status = 'pending'", (w["id"],)
-                    ).fetchall()
-                ]
-            seed_pinyin = reading["pinyin"] if reading else None
-            source_meanings = json.loads(w["source_meanings_json"] or "[]")
-
-            def _on_node(node_name: str, _w=w) -> None:
-                progress.update(task, label=f"{_w['hanzi']} (id={_w['id']}) · {node_name}")
-
-            run_word(w["id"], w["hanzi"], seed_pinyin, source_meanings, checkpointer, on_node=_on_node)
-
-            if pending_types:
-                with get_connection() as conn:
-                    placeholders = ",".join("?" * len(pending_types))
-                    new_statuses = conn.execute(
-                        f"SELECT status FROM cards WHERE word_id = ? AND card_type IN ({placeholders})",
-                        (w["id"], *pending_types),
-                    ).fetchall()
-                for row in new_statuses:
-                    if row["status"] in ("ready", "guardrail_failed"):
-                        attempted_cards += 1
-                        if row["status"] == "guardrail_failed":
-                            failed_cards += 1
-
-            processed += 1
-            fail_pct = (failed_cards / attempted_cards * 100) if attempted_cards else 0.0
-            progress.update(
-                task,
-                advance=1,
-                llm_cost=tracker.llm_cost_usd,
-                el_cost=tracker.elevenlabs_cost_usd,
-                total_cost=tracker.total_cost_usd,
-                fail_pct=fail_pct,
+    interrupted = False
+    try:
+        with Progress(
+            TextColumn("[bold cyan]{task.fields[label]}"),
+            BarColumn(bar_width=28),
+            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+            TextColumn("({task.completed}/{task.total})"),
+            TimeElapsedColumn(),
+            TextColumn("ETA"),
+            TimeRemainingColumn(),
+            TextColumn(
+                "[green]LLM ${task.fields[llm_cost]:.3f}[/green]  "
+                "[magenta]11L ${task.fields[el_cost]:.3f}[/magenta]  "
+                "[bold white]tot ${task.fields[total_cost]:.3f}[/bold white]  "
+                "[red]agotadas {task.fields[fail_pct]:.1f}%[/red]"
+            ),
+            console=console,
+        ) as progress:
+            task = progress.add_task(
+                "generando",
+                total=len(pending) or 1,
+                label="iniciando…",
+                llm_cost=0.0,
+                el_cost=0.0,
+                total_cost=0.0,
+                fail_pct=0.0,
             )
 
-    console.print(f"[bold green]✓ Listo.[/bold green] {processed} palabra(s) procesada(s) en esta corrida.")
+            for w in pending:
+                with get_connection() as conn:
+                    reading = conn.execute("SELECT pinyin FROM readings WHERE word_id = ? LIMIT 1", (w["id"],)).fetchone()
+                    pending_types = [
+                        r["card_type"]
+                        for r in conn.execute(
+                            "SELECT card_type FROM cards WHERE word_id = ? AND status = 'pending'", (w["id"],)
+                        ).fetchall()
+                    ]
+                seed_pinyin = reading["pinyin"] if reading else None
+                source_meanings = json.loads(w["source_meanings_json"] or "[]")
+
+                def _on_node(node_name: str, _w=w) -> None:
+                    progress.update(task, label=f"{_w['hanzi']} (id={_w['id']}) · {node_name}")
+
+                run_word(w["id"], w["hanzi"], seed_pinyin, source_meanings, checkpointer, on_node=_on_node)
+
+                if pending_types:
+                    with get_connection() as conn:
+                        placeholders = ",".join("?" * len(pending_types))
+                        new_statuses = conn.execute(
+                            f"SELECT status FROM cards WHERE word_id = ? AND card_type IN ({placeholders})",
+                            (w["id"], *pending_types),
+                        ).fetchall()
+                    for row in new_statuses:
+                        if row["status"] in ("ready", "guardrail_failed"):
+                            attempted_cards += 1
+                            if row["status"] == "guardrail_failed":
+                                failed_cards += 1
+
+                processed += 1
+                fail_pct = (failed_cards / attempted_cards * 100) if attempted_cards else 0.0
+                progress.update(
+                    task,
+                    advance=1,
+                    llm_cost=tracker.llm_cost_usd,
+                    el_cost=tracker.elevenlabs_cost_usd,
+                    total_cost=tracker.total_cost_usd,
+                    fail_pct=fail_pct,
+                )
+    except KeyboardInterrupt:
+        # Cada palabra comitea sus tarjetas a SQLite apenas terminan (ready o
+        # guardrail_failed) — interrumpir a la mitad no deja nada corrupto,
+        # solo palabras que se quedan en 'pending' para la próxima corrida.
+        interrupted = True
+        console.print(f"\n[yellow]Interrumpido — {processed} palabra(s) procesada(s) antes de parar. Volvé a correr `generate` para seguir con el resto.[/yellow]")
+
+    if not interrupted:
+        console.print(f"[bold green]✓ Listo.[/bold green] {processed} palabra(s) procesada(s) en esta corrida.")
+
     console.print(
         f"Costo estimado (precio de lista): [bold]${tracker.total_cost_usd:.4f}[/bold]"
         f"  ·  LLM ${tracker.llm_cost_usd:.4f} ({tracker.llm_calls} llamadas)"
         f"  ·  ElevenLabs ${tracker.elevenlabs_cost_usd:.4f} ({tracker.elevenlabs_calls} llamadas)"
     )
-    fail_pct_final = (failed_cards / attempted_cards * 100) if attempted_cards else 0.0
-    console.print(
-        f"Tarjetas agotadas (guardrail_failed): [bold red]{failed_cards}/{attempted_cards} ({fail_pct_final:.1f}%)[/bold red]"
-    )
+    if attempted_cards:
+        fail_pct_final = failed_cards / attempted_cards * 100
+        console.print(
+            f"Tarjetas agotadas (guardrail_failed): [bold red]{failed_cards}/{attempted_cards} ({fail_pct_final:.1f}%)[/bold red]"
+        )
     return processed
 
 
 if __name__ == "__main__":
+    import sys
+
     parser = argparse.ArgumentParser(description="Corre el pipeline de generación sobre las palabras pendientes")
     parser.add_argument("--limit", type=int, default=None, help="Máximo de palabras a procesar en esta corrida")
     args = parser.parse_args()
-    run_pending_words(limit=args.limit)
+    try:
+        run_pending_words(limit=args.limit)
+    except KeyboardInterrupt:
+        print("\nInterrumpido antes de empezar a procesar palabras — nada que reportar.")
+        sys.exit(130)

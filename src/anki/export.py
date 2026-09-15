@@ -18,13 +18,24 @@ import random
 from pathlib import Path
 from typing import Optional
 
-from src.anki.api import clear_note_flags, ensure_deck, post, store_media_file
+from rich.console import Console
+from rich.progress import BarColumn, Progress, TextColumn, TimeElapsedColumn, TimeRemainingColumn
+
+from src.anki.api import (
+    clear_note_flags_batch,
+    ensure_deck,
+    find_notes_batch,
+    post,
+    store_media_files_batch,
+    update_note_fields_batch,
+)
 from src.anki.models import CARD_TYPE_LABELS, model_name_for, setup_models
 from src.db.database import get_connection, init_db
 from src.utils.frequency import get_freq_bucket
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DECK_PREFIX = "ChinoSRS"
+EXPORT_BATCH_SIZE = 50  # mismo tamaño que usaba el pipeline viejo (csv_to_anki.py) para addNotes
 
 # Bucket -> prioridad numérica para SortKey/ORDER BY. Igual que el pipeline
 # viejo (src/csv_to_anki.py, ya borrado): agrupar por bucket ancho (~1000+
@@ -105,15 +116,20 @@ class ExportError(RuntimeError):
     pass
 
 
-def _upload_audio(media_cache: dict, file_path: str) -> str:
+def _upload_audio(media_cache: dict, pending_uploads: list, file_path: str) -> str:
+    """Devuelve el filename (determinístico, ver store_media_file) SIN subir
+    el archivo todavía — solo lo encola en `pending_uploads`. El caller sube
+    todo el lote junto (store_media_files_batch) antes de usar las notas, en
+    vez de un POST por archivo (~2s cada uno, ver docstring de esa función)."""
     if file_path in media_cache:
         return media_cache[file_path]
-    filename = store_media_file(PROJECT_ROOT / file_path)
+    filename = Path(file_path).name
     media_cache[file_path] = filename
+    pending_uploads.append((filename, PROJECT_ROOT / file_path))
     return filename
 
 
-def _build_fields(conn, media_cache: dict, word: dict, card_id: int, card_type: str) -> dict:
+def _build_fields(conn, media_cache: dict, pending_uploads: list, word: dict, card_id: int, card_type: str) -> dict:
     primary = _fetch_primary_reading(conn, word["id"])
     if primary is None:
         raise ExportError(f"'{word['hanzi']}' (word_id={word['id']}) no tiene lectura primaria")
@@ -125,7 +141,7 @@ def _build_fields(conn, media_cache: dict, word: dict, card_id: int, card_type: 
     word_audio = _fetch_audio(conn, reading_id=primary["id"], speed="slow")
     if word_audio is None:
         raise ExportError(f"card_id={card_id} ('{word['hanzi']}') no tiene audio de palabra")
-    audio_word_file = _upload_audio(media_cache, word_audio["file_path"])
+    audio_word_file = _upload_audio(media_cache, pending_uploads, word_audio["file_path"])
 
     common = {
         "SortKey": _sort_key(word["hsk_level"], word["frequency_rank"]),
@@ -148,15 +164,15 @@ def _build_fields(conn, media_cache: dict, word: dict, card_id: int, card_type: 
         slow = _fetch_audio(conn, card_example_id=example["id"], speed="slow")
         if normal is None or slow is None:
             raise ExportError(f"card_id={card_id} ('{word['hanzi']}', audio) le falta audio normal y/o lento de oración")
-        common["AudioSentenceNormalFile"] = _upload_audio(media_cache, normal["file_path"])
-        common["AudioSentenceSlowFile"] = _upload_audio(media_cache, slow["file_path"])
+        common["AudioSentenceNormalFile"] = _upload_audio(media_cache, pending_uploads, normal["file_path"])
+        common["AudioSentenceSlowFile"] = _upload_audio(media_cache, pending_uploads, slow["file_path"])
         common["SentenceAlignmentNormalJson"] = normal["alignment_json"] or "null"
         common["SentenceAlignmentSlowJson"] = slow["alignment_json"] or "null"
     else:
         normal = _fetch_audio(conn, card_example_id=example["id"], speed="normal")
         if normal is None:
             raise ExportError(f"card_id={card_id} ('{word['hanzi']}', {card_type}) le falta audio de oración")
-        common["AudioSentenceFile"] = _upload_audio(media_cache, normal["file_path"])
+        common["AudioSentenceFile"] = _upload_audio(media_cache, pending_uploads, normal["file_path"])
         common["SentenceAlignmentJson"] = normal["alignment_json"] or "null"
 
     return common
@@ -170,9 +186,14 @@ def export_pending(hsk_level: int = 3, limit: Optional[int] = None) -> dict:
     mostrando el hsk_level real, ver _build_fields). Devuelve un resumen
     {created, updated, errors: [str, ...]}."""
     init_db()
+    console = Console()
     deck_name = deck_name_for(hsk_level)
+
+    console.print(f"[dim]Verificando mazo '{deck_name}' en Anki…[/dim]")
     ensure_deck(deck_name)
+    console.print("[dim]Verificando/creando los 3 modelos de nota (SentenceCard/PatternCard/AudioCard)…[/dim]")
     setup_models(hsk_level)
+    console.print("[dim]Listo. Buscando tarjetas pendientes de exportar…[/dim]")
 
     with get_connection() as conn:
         rows = conn.execute(
@@ -193,64 +214,155 @@ def export_pending(hsk_level: int = 3, limit: Optional[int] = None) -> dict:
     errors = []
     media_cache: dict = {}
 
-    for row in rows:
-        with get_connection() as conn:
-            word = _fetch_word(conn, row["word_id"])
-            try:
-                fields = _build_fields(conn, media_cache, word, row["card_id"], row["card_type"])
-            except ExportError as ex:
-                errors.append(str(ex))
-                continue
+    interrupted = False
+    try:
+        with Progress(
+            TextColumn("[bold cyan]{task.fields[label]}"),
+            BarColumn(bar_width=28),
+            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+            TextColumn("({task.completed}/{task.total})"),
+            TimeElapsedColumn(),
+            TextColumn("ETA"),
+            TimeRemainingColumn(),
+            TextColumn("[green]creadas {task.fields[created]}[/green]  [blue]actualizadas {task.fields[updated]}[/blue]  [red]errores {task.fields[errors]}[/red]"),
+            console=console,
+        ) as progress:
+            task = progress.add_task(
+                "exportando", total=len(rows) or 1, label="iniciando…", created=0, updated=0, errors=0,
+            )
 
-        model_name = model_name_for(row["card_type"], hsk_level)
+            # Se procesa en lotes de EXPORT_BATCH_SIZE (mismo tamaño que usaba
+            # el pipeline viejo, src/csv_to_anki.py, ya borrado) — cada
+            # AnkiConnect call es un round-trip completo (medido en vivo:
+            # ~2s cada uno contra esta instancia, sin importar el tamaño del
+            # payload), así que agrupar 50 tarjetas en 1 sola llamada (via
+            # `multi` para audio/updateNoteFields, o addNotes que ya acepta
+            # una lista nativamente) es la diferencia entre minutos y horas
+            # frente a una llamada por tarjeta.
+            for chunk_start in range(0, len(rows), EXPORT_BATCH_SIZE):
+                chunk = rows[chunk_start:chunk_start + EXPORT_BATCH_SIZE]
+                pending_uploads: list = []
+                built = []  # (row, word, fields) para las que sí se pudieron armar
 
-        if row["anki_note_id"]:
-            post("updateNoteFields", note={"id": row["anki_note_id"], "fields": fields})
-            # La tarjeta está 'ready' -> lo que sea que la tenía flaggeada ya
-            # se corrigió (si no, seguiría flagged_bad/guardrail_failed y no
-            # habría llegado hasta aquí). Limpiar el flag AQUÍ, junto con el
-            # contenido, evita que quede "sin bandera pero con texto viejo".
-            try:
-                clear_note_flags(row["anki_note_id"])
-            except Exception as ex:
-                errors.append(f"'{word['hanzi']}' ({row['card_type']}): no se pudo limpiar el flag en Anki: {ex}")
-            updated += 1
-            continue
+                for row in chunk:
+                    with get_connection() as conn:
+                        word = _fetch_word(conn, row["word_id"])
+                        progress.update(task, label=f"{word['hanzi']} · {row['card_type']}")
+                        try:
+                            fields = _build_fields(conn, media_cache, pending_uploads, word, row["card_id"], row["card_type"])
+                        except ExportError as ex:
+                            errors.append(str(ex))
+                            progress.update(task, advance=1, errors=len(errors))
+                            continue
+                    built.append((row, word, fields))
 
-        note_ids = post(
-            "addNotes",
-            notes=[
-                {
-                    "deckName": deck_name,
-                    "modelName": model_name,
-                    "fields": fields,
-                    "options": {"allowDuplicate": False},
-                    "tags": ["chinosrs", f"hsk{hsk_level}", row["card_type"]],
-                }
-            ],
+                # Un solo request para TODOS los audios nuevos de este lote
+                # (los ya subidos en un lote anterior de esta misma corrida
+                # ni siquiera llegan aquí — ver media_cache en _upload_audio).
+                store_media_files_batch(pending_uploads)
+
+                creates = [(row, word, fields) for row, word, fields in built if not row["anki_note_id"]]
+                updates = [(row, word, fields) for row, word, fields in built if row["anki_note_id"]]
+
+                # Notas huérfanas: ya existen en Anki, pero cards.anki_note_id
+                # quedó NULL (ej. un export anterior se cortó justo entre
+                # crear la nota y guardar su id). Sin este chequeo, addNotes
+                # las rechaza como duplicadas — acá se reconcilian primero y
+                # pasan a actualizarse en vez de intentar crearlas de nuevo.
+                if creates:
+                    queries = [
+                        f'note:"{model_name_for(row["card_type"], hsk_level)}" Hanzi:{word["hanzi"]}'
+                        for row, word, fields in creates
+                    ]
+                    found = find_notes_batch(queries)
+                    still_new = []
+                    for (row, word, fields), note_ids in zip(creates, found):
+                        if note_ids and len(note_ids) == 1:
+                            updates.append((row, word, fields))
+                            with get_connection() as conn:
+                                conn.execute("UPDATE cards SET anki_note_id = ? WHERE id = ?", (note_ids[0], row["card_id"]))
+                        elif note_ids and len(note_ids) > 1:
+                            errors.append(f"'{word['hanzi']}' ({row['card_type']}): {len(note_ids)} notas huérfanas coinciden, requiere revisión manual")
+                            progress.update(task, advance=1, errors=len(errors))
+                        else:
+                            still_new.append((row, word, fields))
+                    creates = still_new
+
+                if creates:
+                    notes_payload = [
+                        {
+                            "deckName": deck_name,
+                            "modelName": model_name_for(row["card_type"], hsk_level),
+                            "fields": fields,
+                            "options": {"allowDuplicate": False},
+                            "tags": ["chinosrs", f"hsk{hsk_level}", row["card_type"]],
+                        }
+                        for row, word, fields in creates
+                    ]
+                    note_ids = post("addNotes", notes=notes_payload)
+                    with get_connection() as conn:
+                        for (row, word, fields), note_id in zip(creates, note_ids or [None] * len(creates)):
+                            if note_id is None:
+                                errors.append(f"'{word['hanzi']}' ({row['card_type']}): addNotes devolvió None (¿duplicado en Anki?)")
+                                progress.update(task, advance=1, errors=len(errors))
+                            else:
+                                conn.execute("UPDATE cards SET anki_note_id = ? WHERE id = ?", (note_id, row["card_id"]))
+                                created += 1
+                                progress.update(task, advance=1, created=created)
+
+                if updates:
+                    update_note_fields_batch(
+                        {"id": row["anki_note_id"], "fields": fields} for row, word, fields in updates
+                    )
+                    # La tarjeta está 'ready' -> lo que sea que la tenía flaggeada ya se
+                    # corrigió (si no, seguiría flagged_bad/guardrail_failed y no habría
+                    # llegado hasta aquí). Limpiar el flag AQUÍ, junto con el contenido,
+                    # evita que quede "sin bandera pero con texto viejo". Agrupado para
+                    # todo el lote (3 requests en vez de hasta 3 POR nota).
+                    try:
+                        clear_note_flags_batch(row["anki_note_id"] for row, word, fields in updates)
+                    except Exception as ex:
+                        errors.append(f"lote de {len(updates)} actualizaciones: no se pudo limpiar el flag en Anki: {ex}")
+                    for row, word, fields in updates:
+                        updated += 1
+                        progress.update(task, advance=1, updated=updated, errors=len(errors))
+    except KeyboardInterrupt:
+        # Cada tarjeta se comitea a SQLite apenas su lote de 50 responde
+        # (anki_note_id se guarda ahí) — como mucho se pierde el lote que
+        # estaba a medias al interrumpir, nunca algo corrupto. Volver a
+        # correr `export` retoma justo donde se quedó (idempotente: no
+        # duplica lo ya subido).
+        interrupted = True
+        console.print(
+            f"\n[yellow]Interrumpido — {created} creada(s), {updated} actualizada(s) antes de parar. "
+            f"Lo ya subido queda guardado; vuelve a correr `export` para seguir con el resto.[/yellow]"
         )
-        note_id = note_ids[0] if note_ids else None
-        if note_id is None:
-            errors.append(f"'{word['hanzi']}' ({row['card_type']}): addNotes devolvió None (¿duplicado en Anki?)")
-            continue
 
-        with get_connection() as conn:
-            conn.execute("UPDATE cards SET anki_note_id = ? WHERE id = ?", (note_id, row["card_id"]))
-        created += 1
-
-    return {"created": created, "updated": updated, "errors": errors}
+    return {"created": created, "updated": updated, "errors": errors, "interrupted": interrupted}
 
 
 if __name__ == "__main__":
+    import sys
+
     parser = argparse.ArgumentParser(description="Exporta tarjetas 'ready' de un nivel HSK a Anki vía AnkiConnect")
     parser.add_argument("--hsk-level", type=int, default=3)
     parser.add_argument("--limit", type=int, default=None)
     args = parser.parse_args()
 
-    summary = export_pending(hsk_level=args.hsk_level, limit=args.limit)
+    try:
+        summary = export_pending(hsk_level=args.hsk_level, limit=args.limit)
+    except KeyboardInterrupt:
+        # Red de seguridad para un Ctrl+C durante ensure_deck/setup_models
+        # (antes del loop principal, que ya se maneja solo más abajo) —
+        # nunca debería verse un traceback crudo por interrumpir esto.
+        print("\nInterrumpido antes de empezar a exportar tarjetas — nada que reportar.")
+        sys.exit(130)
+
     print(f"Creadas:      {summary['created']}")
     print(f"Actualizadas: {summary['updated']}")
     if summary["errors"]:
         print(f"Errores ({len(summary['errors'])}):")
         for err in summary["errors"]:
             print(f"  - {err}")
+    if summary.get("interrupted"):
+        sys.exit(130)

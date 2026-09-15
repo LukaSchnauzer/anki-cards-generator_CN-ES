@@ -35,67 +35,88 @@ def run_batch(file_path: str, hsk_level: int = 3) -> dict:
     fail_count = 0
     failures = []
 
-    with Progress(
-        TextColumn("[bold cyan]{task.fields[label]}"),
-        BarColumn(bar_width=28),
-        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-        TextColumn("({task.completed}/{task.total})"),
-        TimeElapsedColumn(),
-        TextColumn("ETA"),
-        TimeRemainingColumn(),
-        TextColumn(
-            "[green]LLM ${task.fields[llm_cost]:.3f}[/green]  "
-            "[magenta]11L ${task.fields[el_cost]:.3f}[/magenta]  "
-            "[bold white]tot ${task.fields[total_cost]:.3f}[/bold white]"
-        ),
-        console=console,
-    ) as progress:
-        task = progress.add_task(
-            "guardando", total=len(entries) or 1, label="iniciando…",
-            llm_cost=0.0, el_cost=0.0, total_cost=0.0,
-        )
-
-        for entry in entries:
-            hanzi, card_type = entry["word"], entry["type"]
-            progress.update(task, label=f"{hanzi} · {card_type}")
-
-            with get_connection() as conn:
-                word = conn.execute(
-                    "SELECT id FROM words WHERE hanzi = ? AND COALESCE(export_level, hsk_level) = ?",
-                    (hanzi, hsk_level),
-                ).fetchone()
-
-            if word is None:
-                fail_count += 1
-                failures.append(f"{hanzi} ({card_type}): no se encontró en HSK{hsk_level}")
-            else:
-                try:
-                    ok = save_manual_card(word["id"], card_type, entry["zh"], entry["es"])
-                    if ok:
-                        ok_count += 1
-                    else:
-                        fail_count += 1
-                        failures.append(f"{hanzi} ({card_type}): audio/desglose falló")
-                except Exception as ex:
-                    fail_count += 1
-                    failures.append(f"{hanzi} ({card_type}): {ex}")
-
-            progress.update(
-                task, advance=1, llm_cost=tracker.llm_cost_usd, el_cost=tracker.elevenlabs_cost_usd,
-                total_cost=tracker.total_cost_usd,
+    interrupted = False
+    try:
+        with Progress(
+            TextColumn("[bold cyan]{task.fields[label]}"),
+            BarColumn(bar_width=28),
+            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+            TextColumn("({task.completed}/{task.total})"),
+            TimeElapsedColumn(),
+            TextColumn("ETA"),
+            TimeRemainingColumn(),
+            TextColumn(
+                "[green]LLM ${task.fields[llm_cost]:.3f}[/green]  "
+                "[magenta]11L ${task.fields[el_cost]:.3f}[/magenta]  "
+                "[bold white]tot ${task.fields[total_cost]:.3f}[/bold white]"
+            ),
+            console=console,
+        ) as progress:
+            task = progress.add_task(
+                "guardando", total=len(entries) or 1, label="iniciando…",
+                llm_cost=0.0, el_cost=0.0, total_cost=0.0,
             )
 
-    return {"ok": ok_count, "fail": fail_count, "failures": failures}
+            for entry in entries:
+                hanzi, card_type = entry["word"], entry["type"]
+                progress.update(task, label=f"{hanzi} · {card_type}")
+
+                with get_connection() as conn:
+                    word = conn.execute(
+                        "SELECT id FROM words WHERE hanzi = ? AND COALESCE(export_level, hsk_level) = ?",
+                        (hanzi, hsk_level),
+                    ).fetchone()
+
+                if word is None:
+                    fail_count += 1
+                    failures.append(f"{hanzi} ({card_type}): no se encontró en HSK{hsk_level}")
+                else:
+                    try:
+                        ok = save_manual_card(word["id"], card_type, entry["zh"], entry["es"])
+                        if ok:
+                            ok_count += 1
+                        else:
+                            fail_count += 1
+                            failures.append(f"{hanzi} ({card_type}): audio/desglose falló")
+                    except Exception as ex:
+                        fail_count += 1
+                        failures.append(f"{hanzi} ({card_type}): {ex}")
+
+                progress.update(
+                    task, advance=1, llm_cost=tracker.llm_cost_usd, el_cost=tracker.elevenlabs_cost_usd,
+                    total_cost=tracker.total_cost_usd,
+                )
+    except KeyboardInterrupt:
+        # save_manual_card solo marca la tarjeta 'ready' al terminar del
+        # todo (texto + audio) — si el Ctrl+C cae a mitad de UNA entrada,
+        # esa entrada puede quedar a medio guardar (ver save_manual_card);
+        # las entradas ya completadas antes quedan bien. Volver a correr el
+        # mismo JSON es seguro: sobreescribe, no duplica.
+        interrupted = True
+        console.print(
+            f"\n[yellow]Interrumpido — {ok_count} guardada(s), {fail_count} fallida(s), antes de parar. "
+            f"Volvé a correr `manual-card-batch` con el mismo archivo para completar el resto "
+            f"(sobreescribe sin duplicar, seguro de repetir).[/yellow]"
+        )
+
+    return {"ok": ok_count, "fail": fail_count, "failures": failures, "interrupted": interrupted}
 
 
 if __name__ == "__main__":
+    import sys
+
     init_db()
     parser = argparse.ArgumentParser(description="Guarda en lote tarjetas manuales definidas en un archivo JSON")
     parser.add_argument("--file", required=True, help="Ruta al JSON con la lista de tarjetas (word/type/zh/es)")
     parser.add_argument("--hsk-level", type=int, default=3)
     args = parser.parse_args()
 
-    summary = run_batch(args.file, args.hsk_level)
+    try:
+        summary = run_batch(args.file, args.hsk_level)
+    except KeyboardInterrupt:
+        print("\nInterrumpido antes de empezar — nada que reportar.")
+        sys.exit(130)
+
     print(f"\nGuardadas: {summary['ok']}  ·  Fallidas: {summary['fail']}")
     for f in summary["failures"]:
         print(f"  [FAIL] {f}")
@@ -106,3 +127,5 @@ if __name__ == "__main__":
         f"  ·  LLM ${tracker.llm_cost_usd:.4f} ({tracker.llm_calls} llamadas)"
         f"  ·  ElevenLabs ${tracker.elevenlabs_cost_usd:.4f} ({tracker.elevenlabs_calls} llamadas)"
     )
+    if summary.get("interrupted"):
+        sys.exit(130)

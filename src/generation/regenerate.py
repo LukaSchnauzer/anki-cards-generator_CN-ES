@@ -171,61 +171,72 @@ def regenerate_flagged(hsk_level: Optional[int] = None, model: str = GENERATION_
     fixed = 0
     escalated = 0
 
-    with Progress(
-        TextColumn("[bold cyan]{task.fields[label]}"),
-        BarColumn(bar_width=28),
-        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-        TextColumn("({task.completed}/{task.total})"),
-        TimeElapsedColumn(),
-        TextColumn("ETA"),
-        TimeRemainingColumn(),
-        TextColumn(
-            "[green]LLM ${task.fields[llm_cost]:.3f}[/green]  "
-            "[magenta]11L ${task.fields[el_cost]:.3f}[/magenta]  "
-            "[bold white]tot ${task.fields[total_cost]:.3f}[/bold white]"
-        ),
-        console=console,
-    ) as progress:
-        task = progress.add_task(
-            "regenerando",
-            total=total_items or 1,
-            label="iniciando…",
-            llm_cost=0.0,
-            el_cost=0.0,
-            total_cost=0.0,
+    interrupted = False
+    try:
+        with Progress(
+            TextColumn("[bold cyan]{task.fields[label]}"),
+            BarColumn(bar_width=28),
+            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+            TextColumn("({task.completed}/{task.total})"),
+            TimeElapsedColumn(),
+            TextColumn("ETA"),
+            TimeRemainingColumn(),
+            TextColumn(
+                "[green]LLM ${task.fields[llm_cost]:.3f}[/green]  "
+                "[magenta]11L ${task.fields[el_cost]:.3f}[/magenta]  "
+                "[bold white]tot ${task.fields[total_cost]:.3f}[/bold white]"
+            ),
+            console=console,
+        ) as progress:
+            task = progress.add_task(
+                "regenerando",
+                total=total_items or 1,
+                label="iniciando…",
+                llm_cost=0.0,
+                el_cost=0.0,
+                total_cost=0.0,
+            )
+
+            for row in wp_rows:
+                progress.update(task, label=f"{row['hanzi']} (word_id={row['word_id']}) · word_prep")
+                ok = regenerate_word_prep(row["word_id"], model=model)
+                wp_details.append({"hanzi": row["hanzi"], "word_id": row["word_id"], "fixed": ok})
+                if ok:
+                    wp_fixed += 1
+                else:
+                    with get_connection() as conn:
+                        st = conn.execute("SELECT word_prep_status FROM words WHERE id = ?", (row["word_id"],)).fetchone()
+                    if st["word_prep_status"] == "needs_human":
+                        wp_escalated += 1
+                progress.update(
+                    task, advance=1, llm_cost=tracker.llm_cost_usd, el_cost=tracker.elevenlabs_cost_usd,
+                    total_cost=tracker.total_cost_usd,
+                )
+
+            for row in rows:
+                progress.update(task, label=f"{row['hanzi']} (word_id={row['word_id']}) · {row['card_type']}")
+                ok = regenerate_card(row["word_id"], row["card_type"], model=model)
+                details.append({"hanzi": row["hanzi"], "word_id": row["word_id"], "card_type": row["card_type"], "fixed": ok})
+                if ok:
+                    fixed += 1
+                else:
+                    with get_connection() as conn:
+                        rs = conn.execute("SELECT review_status FROM cards WHERE id = ?", (row["card_id"],)).fetchone()
+                    if rs["review_status"] == "needs_human":
+                        escalated += 1
+                progress.update(
+                    task, advance=1, llm_cost=tracker.llm_cost_usd, el_cost=tracker.elevenlabs_cost_usd,
+                    total_cost=tracker.total_cost_usd,
+                )
+    except KeyboardInterrupt:
+        # Cada word_prep/tarjeta comitea su resultado a SQLite apenas termina
+        # — interrumpir a la mitad solo deja el resto sin reintentar todavía,
+        # nada corrupto. Volver a correr --flagged retoma lo que falte.
+        interrupted = True
+        console.print(
+            f"\n[yellow]Interrumpido — {len(wp_details)}/{len(wp_rows)} word_prep y {len(details)}/{len(rows)} "
+            f"tarjeta(s) procesadas antes de parar. Volvé a correr `regenerate --flagged` para seguir.[/yellow]"
         )
-
-        for row in wp_rows:
-            progress.update(task, label=f"{row['hanzi']} (word_id={row['word_id']}) · word_prep")
-            ok = regenerate_word_prep(row["word_id"], model=model)
-            wp_details.append({"hanzi": row["hanzi"], "word_id": row["word_id"], "fixed": ok})
-            if ok:
-                wp_fixed += 1
-            else:
-                with get_connection() as conn:
-                    st = conn.execute("SELECT word_prep_status FROM words WHERE id = ?", (row["word_id"],)).fetchone()
-                if st["word_prep_status"] == "needs_human":
-                    wp_escalated += 1
-            progress.update(
-                task, advance=1, llm_cost=tracker.llm_cost_usd, el_cost=tracker.elevenlabs_cost_usd,
-                total_cost=tracker.total_cost_usd,
-            )
-
-        for row in rows:
-            progress.update(task, label=f"{row['hanzi']} (word_id={row['word_id']}) · {row['card_type']}")
-            ok = regenerate_card(row["word_id"], row["card_type"], model=model)
-            details.append({"hanzi": row["hanzi"], "word_id": row["word_id"], "card_type": row["card_type"], "fixed": ok})
-            if ok:
-                fixed += 1
-            else:
-                with get_connection() as conn:
-                    rs = conn.execute("SELECT review_status FROM cards WHERE id = ?", (row["card_id"],)).fetchone()
-                if rs["review_status"] == "needs_human":
-                    escalated += 1
-            progress.update(
-                task, advance=1, llm_cost=tracker.llm_cost_usd, el_cost=tracker.elevenlabs_cost_usd,
-                total_cost=tracker.total_cost_usd,
-            )
 
     console.print(
         f"Costo estimado (precio de lista): [bold]${tracker.total_cost_usd:.4f}[/bold]"
@@ -240,13 +251,16 @@ def regenerate_flagged(hsk_level: Optional[int] = None, model: str = GENERATION_
         "word_prep_details": wp_details,
         "total": len(rows),
         "fixed": fixed,
-        "still_failed": len(rows) - fixed,
+        "still_failed": len(details) - fixed,
         "escalated_to_human": escalated,
         "details": details,
+        "interrupted": interrupted,
     }
 
 
 if __name__ == "__main__":
+    import sys
+
     init_db()
     parser = argparse.ArgumentParser(description="Regenera tarjetas puntuales (flaggeadas o fallidas)")
     parser.add_argument("--flagged", action="store_true", help="Regenera todo lo marcado flagged_bad/guardrail_failed")
@@ -255,8 +269,18 @@ if __name__ == "__main__":
     parser.add_argument("--hsk-level", type=int, default=3)
     args = parser.parse_args()
 
+    if not args.flagged and not (args.word and args.type):
+        parser.error("Usa --flagged, o --word <hanzi> junto con --type <sentence|pattern|audio>")
+
     if args.flagged:
-        summary = regenerate_flagged(hsk_level=args.hsk_level)
+        try:
+            summary = regenerate_flagged(hsk_level=args.hsk_level)
+        except KeyboardInterrupt:
+            # Red de seguridad para un Ctrl+C antes de entrar al loop principal
+            # (regenerate_flagged ya maneja el resto solo) — nunca debería
+            # verse un traceback crudo por interrumpir esto.
+            print("\nInterrumpido antes de empezar — nada que reportar.")
+            sys.exit(130)
         if summary["word_prep_total"]:
             print(
                 f"word_prep -> Total: {summary['word_prep_total']}  Arregladas: {summary['word_prep_fixed']}  "
@@ -270,7 +294,7 @@ if __name__ == "__main__":
         )
         for d in summary["details"]:
             print(f"  [{'OK' if d['fixed'] else 'FAIL'}] {d['hanzi']} (word_id={d['word_id']}) · {d['card_type']}")
-    elif args.word and args.type:
+    else:
         with get_connection() as conn:
             word = conn.execute(
                 "SELECT id FROM words WHERE hanzi = ? AND COALESCE(export_level, hsk_level) = ?", (args.word, args.hsk_level)
@@ -278,7 +302,11 @@ if __name__ == "__main__":
         if word is None:
             print(f"No se encontró '{args.word}' en HSK{args.hsk_level}")
         else:
-            ok = regenerate_card(word["id"], args.type)
+            try:
+                ok = regenerate_card(word["id"], args.type)
+            except KeyboardInterrupt:
+                print("\nInterrumpido — nada que reportar.")
+                sys.exit(130)
             print("OK" if ok else "FAIL")
             tracker = get_tracker()
             print(
@@ -286,5 +314,3 @@ if __name__ == "__main__":
                 f"  ·  LLM ${tracker.llm_cost_usd:.4f} ({tracker.llm_calls} llamadas)"
                 f"  ·  ElevenLabs ${tracker.elevenlabs_cost_usd:.4f} ({tracker.elevenlabs_calls} llamadas)"
             )
-    else:
-        parser.error("Usa --flagged, o --word <hanzi> junto con --type <sentence|pattern|audio>")
