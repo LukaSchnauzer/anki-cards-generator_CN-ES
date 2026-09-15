@@ -32,9 +32,11 @@ from src.llm.client import GENERATION_MODEL, LLMError, call_llm
 MAX_ATTEMPTS = 3
 PHASE = "pattern_card"
 PATTERN_CARD_GUARDRAIL_CHECKS = [
+    # 'pinyin_accuracy' no está acá a propósito: apply_reference_pinyin()
+    # sobreescribe SIEMPRE example_pinyin con la herramienta determinística
+    # antes de llegar acá — ver la misma nota en sentence_card.py.
     "grammar_correct",
     "no_compound_leak",
-    "pinyin_accuracy",
     "breakdown_accuracy",
     "translation_accuracy",
     "cloze_single_occurrence",

@@ -34,9 +34,15 @@ from src.llm.client import GENERATION_MODEL, LLMError, call_llm
 MAX_ATTEMPTS = 3
 PHASE = "sentence_card"
 SENTENCE_CARD_GUARDRAIL_CHECKS = [
+    # 'pinyin_accuracy' no está acá a propósito: apply_reference_pinyin()
+    # sobreescribe SIEMPRE example_pinyin con la herramienta determinística
+    # antes de llegar acá — no queda nada que un LLM necesite verificar, y
+    # preguntarle solo invita a que contradiga la referencia con su propia
+    # memoria (visto en vivo: dijo que 'zhège' era correcto cuando la
+    # herramienta decía 'zhè ge'). breakdown_accuracy tampoco evalúa pinyin
+    # por el mismo motivo — ver su definición en prompts.py.
     "grammar_correct",
     "no_compound_leak",
-    "pinyin_accuracy",
     "breakdown_accuracy",
     "translation_accuracy",
 ]
