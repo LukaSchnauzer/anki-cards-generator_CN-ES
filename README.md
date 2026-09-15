@@ -90,11 +90,30 @@ Cada palabra genera las 3, cada una con su propio acento de color:
 ### 🀄 SentenceCard (teal)
 Frente: oración de ejemplo con la palabra resaltada. Reverso: pinyin, significado, desglose palabra por palabra, colocaciones comunes, audio con resaltado sincronizado.
 
+<p float="left">
+  <img src="docs/screenshots/sentence_card_front.png" width="380" alt="SentenceCard - frente">
+  <img src="docs/screenshots/sentence_card_back.png" width="380" alt="SentenceCard - reverso">
+</p>
+
 ### 🧩 PatternCard (ámbar)
 Frente: la misma oración con la palabra objetivo oculta como hueco (`＿＿`, ubicado por posición en el desglose, no por búsqueda de texto — así una palabra dentro de un compuesto no se ve afectada). 2 pistas progresivas. Sin audio.
 
+<p float="left">
+  <img src="docs/screenshots/pattern_card_front.png" width="380" alt="PatternCard - frente">
+  <img src="docs/screenshots/pattern_card_back.png" width="380" alt="PatternCard - reverso">
+</p>
+
 ### 🔊 AudioCard (violeta)
 Frente: solo el audio de la oración (velocidad normal + lenta), sin texto. 2 pistas progresivas (revela primero el hanzi objetivo, luego el significado). Reverso: desglose completo con resaltado sincronizado en ambas velocidades.
+
+<p float="left">
+  <img src="docs/screenshots/audio_card_front.png" width="380" alt="AudioCard - frente">
+  <img src="docs/screenshots/audio_card_back.png" width="380" alt="AudioCard - reverso">
+</p>
+
+*(Ejemplo real generado por el pipeline para la palabra 咖啡 — "café". Capturas en modo noche — las plantillas también soportan modo día, vía la clase `.nightMode` que usa Anki.)*
+
+**[▶ Ver demo interactiva](https://claude.ai/artifact/3cSSaBDSsXuXiyndeko6Gg)** — las 3 tarjetas con audio real, clic para voltear, y toggle día/noche. *(Artifact privado por default — compártelo desde el menú de la página si quieres que cualquiera con el link pueda abrirlo.)*
 
 ---
 
