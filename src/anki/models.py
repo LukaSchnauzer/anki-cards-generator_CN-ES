@@ -22,10 +22,44 @@ def load_template(template_name: str) -> str:
 # card_type (columna cards.card_type) -> mitad del nombre del modelo Anki.
 CARD_TYPE_LABELS = {"sentence": "SentenceCard", "pattern": "PatternCard", "audio": "AudioCard"}
 
+# Campo de audio visible (nombre de archivo pelado, usado en <audio src="{{Campo}}">
+# + botón custom en las plantillas, para evitar el autoplay nativo de Anki) ->
+# campo "fantasma" que lo acompaña. Anki decide qué medios están "en uso" (para
+# exportar .apkg o para Check Media) buscando el patrón literal [sound:archivo]
+# en el TEXTO CRUDO de los campos — nunca mira el HTML ya renderizado de la
+# plantilla, así que un <audio src="{{Campo}}"> con el nombre pelado es
+# invisible para ese detector (confirmado en vivo: exportar el mazo daba un
+# .apkg con 0 archivos de media, aunque el audio sí se escucha bien en el
+# repaso). El campo Ref, con valor "[sound:archivo.mp3]", nunca se referencia
+# en ninguna plantilla — por eso nunca aparece en pantalla ni dispara el
+# autoplay — pero sí lo detecta el escaneo de medios de Anki.
+AUDIO_REF_FIELDS = {
+    "AudioWordFile": "AudioWordFileRef",
+    "AudioSentenceFile": "AudioSentenceFileRef",
+    "AudioSentenceNormalFile": "AudioSentenceNormalFileRef",
+    "AudioSentenceSlowFile": "AudioSentenceSlowFileRef",
+}
+
+
+def ensure_audio_ref_fields(model_name: str, audio_fields: List[str]) -> None:
+    """Agrega los campos Ref que le falten a un modelo YA EXISTENTE — para
+    modelos creados antes de que existiera este mecanismo. Idempotente:
+    revisa qué campos ya tiene antes de intentar agregar."""
+    existing = set(post("modelFieldNames", modelName=model_name))
+    for audio_field in audio_fields:
+        ref_field = AUDIO_REF_FIELDS[audio_field]
+        if ref_field not in existing:
+            post("modelFieldAdd", modelName=model_name, fieldName=ref_field)
+
 
 def model_name_for(card_type: str, hsk_level: int) -> str:
     """Nombre del modelo Anki para (card_type de la DB, nivel HSK), ej. 'sentence' + 3 -> 'ChinoSRS_SentenceCard_HSK3'."""
     return f"ChinoSRS_{CARD_TYPE_LABELS[card_type]}_HSK{hsk_level}"
+
+
+SENTENCE_AUDIO_FIELDS = ["AudioWordFile", "AudioSentenceFile"]
+PATTERN_AUDIO_FIELDS = ["AudioWordFile", "AudioSentenceFile"]
+AUDIO_CARD_AUDIO_FIELDS = ["AudioWordFile", "AudioSentenceNormalFile", "AudioSentenceSlowFile"]
 
 
 def create_model_sentence(hsk_level: int, force_recreate: bool = False):
@@ -34,6 +68,7 @@ def create_model_sentence(hsk_level: int, force_recreate: bool = False):
     if force_recreate:
         delete_model(model_name)
     if model_exists(model_name):
+        ensure_audio_ref_fields(model_name, SENTENCE_AUDIO_FIELDS)
         return
 
     fields = [
@@ -42,6 +77,7 @@ def create_model_sentence(hsk_level: int, force_recreate: bool = False):
         "ExampleZh", "ExampleEs",
         "BreakdownJson", "SecondariesJson", "CollocationsJson",
         "AudioWordFile", "AudioSentenceFile", "SentenceAlignmentJson",
+        "AudioWordFileRef", "AudioSentenceFileRef",
     ]
 
     templates = [{
@@ -60,6 +96,7 @@ def create_model_pattern(hsk_level: int, force_recreate: bool = False):
     if force_recreate:
         delete_model(model_name)
     if model_exists(model_name):
+        ensure_audio_ref_fields(model_name, PATTERN_AUDIO_FIELDS)
         return
 
     fields = [
@@ -68,6 +105,7 @@ def create_model_pattern(hsk_level: int, force_recreate: bool = False):
         "ExampleZh", "ExampleEs",
         "BreakdownJson", "SecondariesJson", "CollocationsJson",
         "AudioWordFile", "AudioSentenceFile", "SentenceAlignmentJson",
+        "AudioWordFileRef", "AudioSentenceFileRef",
     ]
 
     templates = [{
@@ -86,6 +124,7 @@ def create_model_audio(hsk_level: int, force_recreate: bool = False):
     if force_recreate:
         delete_model(model_name)
     if model_exists(model_name):
+        ensure_audio_ref_fields(model_name, AUDIO_CARD_AUDIO_FIELDS)
         return
 
     fields = [
@@ -95,6 +134,7 @@ def create_model_audio(hsk_level: int, force_recreate: bool = False):
         "BreakdownJson", "SecondariesJson", "CollocationsJson",
         "AudioWordFile", "AudioSentenceNormalFile", "AudioSentenceSlowFile",
         "SentenceAlignmentNormalJson", "SentenceAlignmentSlowJson",
+        "AudioWordFileRef", "AudioSentenceNormalFileRef", "AudioSentenceSlowFileRef",
     ]
 
     templates = [{

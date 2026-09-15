@@ -29,7 +29,7 @@ from src.anki.api import (
     store_media_files_batch,
     update_note_fields_batch,
 )
-from src.anki.models import CARD_TYPE_LABELS, model_name_for, setup_models
+from src.anki.models import AUDIO_REF_FIELDS, CARD_TYPE_LABELS, model_name_for, setup_models
 from src.db.database import get_connection, init_db
 from src.utils.frequency import get_freq_bucket
 
@@ -134,7 +134,9 @@ def _upload_audio(media_cache: dict, pending_uploads: list, file_path: str) -> s
     return filename
 
 
-def _build_fields(conn, media_cache: dict, pending_uploads: list, word: dict, card_id: int, card_type: str) -> dict:
+def _build_fields(
+    conn, media_cache: dict, pending_uploads: list, word: dict, card_id: int, card_type: str, is_update: bool = False,
+) -> dict:
     primary = _fetch_primary_reading(conn, word["id"])
     if primary is None:
         raise ExportError(f"'{word['hanzi']}' (word_id={word['id']}) no tiene lectura primaria")
@@ -149,7 +151,6 @@ def _build_fields(conn, media_cache: dict, pending_uploads: list, word: dict, ca
     audio_word_file = _upload_audio(media_cache, pending_uploads, word_audio["file_path"])
 
     common = {
-        "SortKey": _sort_key(word["hsk_level"], word["frequency_rank"]),
         "Hanzi": word["hanzi"],
         "HskLevel": str(word["hsk_level"]),
         "FreqBucket": get_freq_bucket(word["frequency_rank"]) or "",
@@ -163,6 +164,17 @@ def _build_fields(conn, media_cache: dict, pending_uploads: list, word: dict, ca
         "CollocationsJson": json.dumps(_fetch_collocations(conn, word["id"]), ensure_ascii=False),
         "AudioWordFile": audio_word_file,
     }
+
+    # SortKey solo se asigna al CREAR la nota — es el primer campo, así que
+    # Anki lo usa para detectar duplicados; reasignarlo en cada export (antes
+    # con random.randint, siempre un valor nuevo) cambiaba el orden del
+    # Browser en cada corrida aunque el contenido no hubiera cambiado, y
+    # además desalineaba ese orden del `due` real (que sí queda fijo, ver
+    # resync_due_order.py). No incluirlo en absoluto en el payload de una
+    # actualización hace que updateNoteFields deje el valor existente
+    # intacto — así queda fijo para siempre desde que se crea la nota.
+    if not is_update:
+        common["SortKey"] = _sort_key(word["hsk_level"], word["frequency_rank"])
 
     if card_type == "audio":
         normal = _fetch_audio(conn, card_example_id=example["id"], speed="normal")
@@ -179,6 +191,17 @@ def _build_fields(conn, media_cache: dict, pending_uploads: list, word: dict, ca
             raise ExportError(f"card_id={card_id} ('{word['hanzi']}', {card_type}) le falta audio de oración")
         common["AudioSentenceFile"] = _upload_audio(media_cache, pending_uploads, normal["file_path"])
         common["SentenceAlignmentJson"] = normal["alignment_json"] or "null"
+
+    # Anki decide qué medios exportar/conservar buscando el patrón literal
+    # [sound:archivo] en el texto CRUDO de los campos — nunca mira el HTML ya
+    # renderizado, así que un <audio src="{{Campo}}"> con el nombre pelado
+    # (lo que se necesita para el botón custom, sin autoplay nativo) es
+    # invisible para ese detector. Estos campos Ref duplican el valor
+    # envuelto en [sound:...], sin que ninguna plantilla los muestre nunca —
+    # ver AUDIO_REF_FIELDS en models.py.
+    for audio_field, ref_field in AUDIO_REF_FIELDS.items():
+        if audio_field in common:
+            common[ref_field] = f"[sound:{common[audio_field]}]"
 
     return common
 
@@ -254,7 +277,10 @@ def export_pending(hsk_level: int = 3, limit: Optional[int] = None) -> dict:
                         word = _fetch_word(conn, row["word_id"])
                         progress.update(task, label=f"{word['hanzi']} · {row['card_type']}")
                         try:
-                            fields = _build_fields(conn, media_cache, pending_uploads, word, row["card_id"], row["card_type"])
+                            fields = _build_fields(
+                                conn, media_cache, pending_uploads, word, row["card_id"], row["card_type"],
+                                is_update=bool(row["anki_note_id"]),
+                            )
                         except ExportError as ex:
                             errors.append(str(ex))
                             progress.update(task, advance=1, errors=len(errors))
@@ -283,6 +309,10 @@ def export_pending(hsk_level: int = 3, limit: Optional[int] = None) -> dict:
                     still_new = []
                     for (row, word, fields), note_ids in zip(creates, found):
                         if note_ids and len(note_ids) == 1:
+                            # Se armó con is_update=False (todavía no sabíamos que
+                            # ya existía) -> trae un SortKey nuevo que NO debe
+                            # pisar el original de la nota huérfana.
+                            fields.pop("SortKey", None)
                             updates.append((row, word, fields))
                             with get_connection() as conn:
                                 conn.execute("UPDATE cards SET anki_note_id = ? WHERE id = ?", (note_ids[0], row["card_id"]))
