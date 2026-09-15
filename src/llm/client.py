@@ -42,7 +42,15 @@ def call_llm(system_prompt: str, user_prompt: str, model: str = DEFAULT_MODEL, t
         ],
     }
     headers = {"Authorization": f"Bearer {api_key}"}
-    r = requests.post(OPENAI_API_URL, headers=headers, json=body, timeout=60)
+    try:
+        r = requests.post(OPENAI_API_URL, headers=headers, json=body, timeout=60)
+    except requests.exceptions.RequestException as ex:
+        # Timeout, conexión perdida, DNS, etc. — sin esto, un simple hiccup de
+        # red tumbaba TODO el batch de `generate` en vez de tratarse como un
+        # intento fallido más (los retry loops de cada agente ya solo
+        # atrapan LLMError, no excepciones de red crudas).
+        raise LLMError(f"Error de red llamando al LLM: {ex}") from ex
+
     if r.status_code != 200:
         raise LLMError(f"Error de API {r.status_code}: {r.text}")
 

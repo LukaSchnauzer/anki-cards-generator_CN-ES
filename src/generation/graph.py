@@ -61,6 +61,15 @@ def word_prep_node(state: WordPipelineState) -> dict:
         return {"word_prep_ok": True}
 
     ok = run_word_prep(state["word_id"], state["hanzi"], state["seed_pinyin"], state["source_meanings"])
+    with get_connection() as conn:
+        # 'failed' acá es la ronda automática — igual que guardrail_failed en
+        # cards, no cuenta contra el tope; solo regenerate_word_prep (llamado
+        # desde `regenerate --flagged`) incrementa word_prep_attempts y puede
+        # escalar a 'needs_human'.
+        conn.execute(
+            "UPDATE words SET word_prep_status = ? WHERE id = ?",
+            ("pending" if ok else "failed", state["word_id"]),
+        )
     return {"word_prep_ok": ok}
 
 
@@ -294,11 +303,19 @@ def run_word(
     return result
 
 
+_TERMINAL_WORD_PREP_STATUSES = ("failed", "needs_human")
+
+
 def _word_needs_first_attempt(conn, word_id: int) -> bool:
     """True si a la palabra le queda alguna tarjeta que nunca se ha intentado
     (status='pending'). Una tarjeta en 'guardrail_failed' NO cuenta — a
     propósito, `generate` la deja quieta (ver _TERMINAL_CARD_STATUSES);
-    solo se reintenta con `regenerate --flagged`, a mano."""
+    solo se reintenta con `regenerate --flagged`, a mano. Mismo trato para la
+    palabra completa si word_prep está 'failed'/'needs_human' — sin esto,
+    generate reintentaría word_prep sin límite en cada corrida futura."""
+    wp_status = conn.execute("SELECT word_prep_status FROM words WHERE id = ?", (word_id,)).fetchone()["word_prep_status"]
+    if wp_status in _TERMINAL_WORD_PREP_STATUSES:
+        return False
     row = conn.execute(
         "SELECT COUNT(*) AS n FROM cards WHERE word_id = ? AND card_type IN ('sentence', 'pattern', 'audio') AND status = 'pending'",
         (word_id,),
@@ -323,6 +340,8 @@ def run_pending_words(limit: Optional[int] = None) -> int:
 
     console = Console()
     processed = 0
+    attempted_cards = 0  # tarjetas que salieron de 'pending' en ESTA corrida (ready o guardrail_failed)
+    failed_cards = 0  # de esas, cuántas agotaron sus reintentos (guardrail_failed)
 
     with Progress(
         TextColumn("[bold cyan]{task.fields[label]}"),
@@ -335,7 +354,8 @@ def run_pending_words(limit: Optional[int] = None) -> int:
         TextColumn(
             "[green]LLM ${task.fields[llm_cost]:.3f}[/green]  "
             "[magenta]11L ${task.fields[el_cost]:.3f}[/magenta]  "
-            "[bold white]tot ${task.fields[total_cost]:.3f}[/bold white]"
+            "[bold white]tot ${task.fields[total_cost]:.3f}[/bold white]  "
+            "[red]agotadas {task.fields[fail_pct]:.1f}%[/red]"
         ),
         console=console,
     ) as progress:
@@ -346,11 +366,18 @@ def run_pending_words(limit: Optional[int] = None) -> int:
             llm_cost=0.0,
             el_cost=0.0,
             total_cost=0.0,
+            fail_pct=0.0,
         )
 
         for w in pending:
             with get_connection() as conn:
                 reading = conn.execute("SELECT pinyin FROM readings WHERE word_id = ? LIMIT 1", (w["id"],)).fetchone()
+                pending_types = [
+                    r["card_type"]
+                    for r in conn.execute(
+                        "SELECT card_type FROM cards WHERE word_id = ? AND status = 'pending'", (w["id"],)
+                    ).fetchall()
+                ]
             seed_pinyin = reading["pinyin"] if reading else None
             source_meanings = json.loads(w["source_meanings_json"] or "[]")
 
@@ -359,13 +386,28 @@ def run_pending_words(limit: Optional[int] = None) -> int:
 
             run_word(w["id"], w["hanzi"], seed_pinyin, source_meanings, checkpointer, on_node=_on_node)
 
+            if pending_types:
+                with get_connection() as conn:
+                    placeholders = ",".join("?" * len(pending_types))
+                    new_statuses = conn.execute(
+                        f"SELECT status FROM cards WHERE word_id = ? AND card_type IN ({placeholders})",
+                        (w["id"], *pending_types),
+                    ).fetchall()
+                for row in new_statuses:
+                    if row["status"] in ("ready", "guardrail_failed"):
+                        attempted_cards += 1
+                        if row["status"] == "guardrail_failed":
+                            failed_cards += 1
+
             processed += 1
+            fail_pct = (failed_cards / attempted_cards * 100) if attempted_cards else 0.0
             progress.update(
                 task,
                 advance=1,
                 llm_cost=tracker.llm_cost_usd,
                 el_cost=tracker.elevenlabs_cost_usd,
                 total_cost=tracker.total_cost_usd,
+                fail_pct=fail_pct,
             )
 
     console.print(f"[bold green]✓ Listo.[/bold green] {processed} palabra(s) procesada(s) en esta corrida.")
@@ -373,6 +415,10 @@ def run_pending_words(limit: Optional[int] = None) -> int:
         f"Costo estimado (precio de lista): [bold]${tracker.total_cost_usd:.4f}[/bold]"
         f"  ·  LLM ${tracker.llm_cost_usd:.4f} ({tracker.llm_calls} llamadas)"
         f"  ·  ElevenLabs ${tracker.elevenlabs_cost_usd:.4f} ({tracker.elevenlabs_calls} llamadas)"
+    )
+    fail_pct_final = (failed_cards / attempted_cards * 100) if attempted_cards else 0.0
+    console.print(
+        f"Tarjetas agotadas (guardrail_failed): [bold red]{failed_cards}/{attempted_cards} ({fail_pct_final:.1f}%)[/bold red]"
     )
     return processed
 

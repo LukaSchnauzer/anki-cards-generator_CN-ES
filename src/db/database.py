@@ -21,6 +21,14 @@ def _migrate(conn: sqlite3.Connection) -> None:
     if "regen_attempts" not in cols:
         conn.execute("ALTER TABLE cards ADD COLUMN regen_attempts INTEGER NOT NULL DEFAULT 0")
 
+    word_cols = {row[1] for row in conn.execute("PRAGMA table_info(words)").fetchall()}
+    if "export_level" not in word_cols:
+        conn.execute("ALTER TABLE words ADD COLUMN export_level INTEGER")
+    if "word_prep_status" not in word_cols:
+        conn.execute("ALTER TABLE words ADD COLUMN word_prep_status TEXT NOT NULL DEFAULT 'pending'")
+    if "word_prep_attempts" not in word_cols:
+        conn.execute("ALTER TABLE words ADD COLUMN word_prep_attempts INTEGER NOT NULL DEFAULT 0")
+
 
 def init_db(db_path: Path = DEFAULT_DB_PATH) -> None:
     """Crea la base de datos y aplica el esquema si no existen las tablas."""

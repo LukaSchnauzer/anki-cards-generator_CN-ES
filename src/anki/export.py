@@ -51,12 +51,16 @@ def deck_name_for(hsk_level: int) -> str:
     return f"{DECK_PREFIX} - HSK{hsk_level}"
 
 
-def _sort_key(frequency_rank: Optional[int]) -> str:
+def _sort_key(hsk_level: int, frequency_rank: Optional[int]) -> str:
     """Primer campo del modelo -> Anki lo usa como Sort Field por defecto.
-    bucket (2 dígitos) + aleatorio (4 dígitos), para que el Browser ordene
-    igual que como se crearon las notas (ver _FREQ_BUCKET_SQL_CASE)."""
+    nivel HSK real (2 dígitos) + bucket (2 dígitos) + aleatorio (4 dígitos) —
+    mismo formato que el pipeline viejo (ej. "020100123"), para que el
+    Browser ordene igual que como se crearon las notas (ver
+    _FREQ_BUCKET_SQL_CASE). En el uso normal (un nivel por mazo) el prefijo
+    de nivel es idéntico en toda la exportación, así que no cambia nada —
+    solo importa cuando se mezclan niveles a propósito (ver export_level)."""
     bucket_code = _FREQ_BUCKET_ORDER.get(get_freq_bucket(frequency_rank), 9)
-    return f"{bucket_code:02d}{random.randint(0, 9999):04d}"
+    return f"{hsk_level:02d}{bucket_code:02d}{random.randint(0, 9999):04d}"
 
 
 def _fetch_word(conn, word_id: int) -> dict:
@@ -124,7 +128,7 @@ def _build_fields(conn, media_cache: dict, word: dict, card_id: int, card_type: 
     audio_word_file = _upload_audio(media_cache, word_audio["file_path"])
 
     common = {
-        "SortKey": _sort_key(word["frequency_rank"]),
+        "SortKey": _sort_key(word["hsk_level"], word["frequency_rank"]),
         "Hanzi": word["hanzi"],
         "HskLevel": str(word["hsk_level"]),
         "FreqBucket": get_freq_bucket(word["frequency_rank"]) or "",
@@ -159,8 +163,12 @@ def _build_fields(conn, media_cache: dict, word: dict, card_id: int, card_type: 
 
 
 def export_pending(hsk_level: int = 3, limit: Optional[int] = None) -> dict:
-    """Exporta a Anki todas las tarjetas 'ready' de `hsk_level`. Devuelve un
-    resumen {created, updated, errors: [str, ...]}."""
+    """Exporta a Anki todas las tarjetas 'ready' cuyo mazo destino sea
+    `hsk_level` (COALESCE(export_level, hsk_level) — export_level es un
+    override manual de a qué mazo va, usado solo para la migración puntual
+    de palabras HSK1/2 al mazo de HSK3; el chip visible en la tarjeta sigue
+    mostrando el hsk_level real, ver _build_fields). Devuelve un resumen
+    {created, updated, errors: [str, ...]}."""
     init_db()
     deck_name = deck_name_for(hsk_level)
     ensure_deck(deck_name)
@@ -171,8 +179,8 @@ def export_pending(hsk_level: int = 3, limit: Optional[int] = None) -> dict:
             f"""
             SELECT c.id AS card_id, c.card_type, c.anki_note_id, c.word_id
             FROM cards c JOIN words w ON w.id = c.word_id
-            WHERE c.status = 'ready' AND w.hsk_level = ?
-            ORDER BY {_FREQ_BUCKET_SQL_CASE}, RANDOM()
+            WHERE c.status = 'ready' AND COALESCE(w.export_level, w.hsk_level) = ?
+            ORDER BY w.hsk_level, {_FREQ_BUCKET_SQL_CASE}, RANDOM()
             """,
             (hsk_level,),
         ).fetchall()

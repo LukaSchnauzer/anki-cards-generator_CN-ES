@@ -59,8 +59,13 @@ GUARDRAIL_CHECKS = {
     "pinyin_accuracy": (
         "pinyin_accuracy: ¿el pinyin dado es la transcripción correcta (tonos incluidos) para "
         "el texto en chino que acompaña? Puede ser el pinyin de un solo hanzi/lectura o el "
-        "pinyin de una oración completa — verifica todo lo que se te dio contra tu conocimiento "
-        "del chino estándar (Putonghua), carácter por carácter si es una oración."
+        "pinyin de una oración completa. Si el contexto incluye un campo de referencia calculado "
+        "por una herramienta determinística (no un LLM, ej. terminado en '_sin_espacios'), "
+        "ÚSALO como fuente de verdad principal, comparando contra el 'pinyin_sin_espacios' "
+        "correspondiente — es más confiable que recordar tonos de memoria, que ha demostrado ser "
+        "inconsistente incluso para el mismo input repetido. Si no hay referencia disponible "
+        "(ej. una lectura secundaria/polífona legítima), evalúa con tu propio conocimiento del "
+        "chino estándar (Putonghua)."
     ),
     "meaning_not_archaic_or_surname": (
         "meaning_not_archaic_or_surname: ¿el significado dado es el uso MÁS COMÚN en el chino "
@@ -82,8 +87,12 @@ GUARDRAIL_CHECKS = {
     ),
     "breakdown_accuracy": (
         "breakdown_accuracy: revisa el desglose palabra por palabra de la oración (lista de "
-        "elementos con hanzi/pinyin/función gramatical/significado). Evalúa SOLO estas dos "
-        "cosas, que son objetivamente verificables: (1) ¿el pinyin de cada elemento es "
+        "elementos con hanzi/pinyin/función gramatical/significado). Cada elemento trae "
+        "'pinyin_referencia_herramienta_sin_espacios', calculado por una herramienta "
+        "determinística (no un LLM) — úsalo como fuente de verdad principal, comparando contra "
+        "el 'pinyin_sin_espacios' del mismo elemento, en vez de recordar tonos de memoria. "
+        "Evalúa SOLO estas dos cosas, que son objetivamente verificables: "
+        "(1) ¿el pinyin de cada elemento es "
         "correcto? (2) ¿el significado dado es el correcto PARA ESE CONTEXTO específico (no "
         "una definición genérica de diccionario si el contexto pide otra cosa, como ocurre con "
         "partículas como 了/的/着/得)? NO evalúes ni falles el check por la función gramatical "

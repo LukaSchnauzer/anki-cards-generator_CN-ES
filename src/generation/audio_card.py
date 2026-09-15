@@ -8,13 +8,16 @@ desambiguación auditiva (más relajado que el de cloze).
 """
 
 import json
+from typing import Optional
 
 from pydantic import ValidationError
 
 from src.db.database import get_connection
 from src.generation.card_common import (
     CardExampleOutput,
+    apply_reference_pinyin,
     build_user_prompt,
+    guardrail_checks_for,
     guardrail_context,
     log_phase,
     mark_card_guardrail_failed,
@@ -38,9 +41,10 @@ AUDIO_CARD_GUARDRAIL_CHECKS = [
 
 
 def generate_audio_card(
-    hanzi: str, pinyin: str, meaning_es: str, meaning_zh: str, model: str = "gpt-4o"
+    hanzi: str, pinyin: str, meaning_es: str, meaning_zh: str, model: str = "gpt-4o",
+    previous_error: Optional[str] = None,
 ) -> CardExampleOutput:
-    user_prompt = build_user_prompt(hanzi, pinyin, meaning_es, meaning_zh)
+    user_prompt = build_user_prompt(hanzi, pinyin, meaning_es, meaning_zh, previous_error=previous_error)
     raw = call_llm(AUDIO_CARD_SYSTEM_PROMPT, user_prompt, model=model)
     try:
         data = json.loads(raw)
@@ -58,13 +62,17 @@ def run_audio_card(
     velocidades) lo genera un nodo separado del grafo una vez que el texto
     pasa el guardrail (status='guardrail_passed').
     """
+    previous_error: Optional[str] = None
     for attempt in range(1, MAX_ATTEMPTS + 1):
         try:
-            result = generate_audio_card(hanzi, pinyin, meaning_es, meaning_zh, model=model)
-            guardrail_result = run_guardrail(AUDIO_CARD_GUARDRAIL_CHECKS, guardrail_context(hanzi, result), model=model)
+            result = generate_audio_card(hanzi, pinyin, meaning_es, meaning_zh, model=model, previous_error=previous_error)
+            apply_reference_pinyin(result)
+            checks = guardrail_checks_for(AUDIO_CARD_GUARDRAIL_CHECKS, hanzi)
+            guardrail_result = run_guardrail(checks, guardrail_context(hanzi, result), model=model)
         except LLMError as ex:
+            previous_error = f"Respuesta del LLM inválida/no siguió el schema: {ex}"
             with get_connection() as conn:
-                log_phase(conn, card_id, PHASE, "failed", attempt, f"Respuesta del LLM inválida/no siguió el schema: {ex}")
+                log_phase(conn, card_id, PHASE, "failed", attempt, previous_error)
             continue
 
         if guardrail_result.passed:
@@ -74,11 +82,11 @@ def run_audio_card(
                 mark_card_text_ready(conn, card_id)
             return True
 
-        reasons = "; ".join(
+        previous_error = "; ".join(
             f"{name}: {check.reason}" for name, check in guardrail_result.checks.items() if not check.passed
         )
         with get_connection() as conn:
-            log_phase(conn, card_id, PHASE, "failed", attempt, reasons)
+            log_phase(conn, card_id, PHASE, "failed", attempt, previous_error)
 
     with get_connection() as conn:
         mark_card_guardrail_failed(conn, card_id)

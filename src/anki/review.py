@@ -49,7 +49,7 @@ def flag_batch(flag: int, notes_text: str = "") -> dict:
 
         with get_connection() as conn:
             word = conn.execute(
-                "SELECT id FROM words WHERE hanzi = ? AND hsk_level = ?", (hanzi, hsk_level)
+                "SELECT id FROM words WHERE hanzi = ? AND COALESCE(export_level, hsk_level) = ?", (hanzi, hsk_level)
             ).fetchone()
             if word is None:
                 unmatched.append(f"noteId={info['noteId']}: '{hanzi}' HSK{hsk_level} no existe en la DB")

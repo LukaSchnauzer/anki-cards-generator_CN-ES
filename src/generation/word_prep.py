@@ -18,6 +18,7 @@ from src.db.database import get_connection
 from src.generation.guardrail import run_guardrail
 from src.generation.prompts import WORD_PREP_SYSTEM_PROMPT
 from src.llm.client import LLMError, call_llm
+from src.utils.pinyin_ref import reference_pinyin
 
 MAX_ATTEMPTS = 3
 WORD_PREP_GUARDRAIL_CHECKS = ["pinyin_accuracy", "meaning_not_archaic_or_surname"]
@@ -44,13 +45,21 @@ class WordPrepOutput(BaseModel):
     collocations: List[CollocationOut] = Field(default_factory=list)
 
 
-def build_user_prompt(hanzi: str, seed_pinyin: Optional[str], source_meanings: Optional[list]) -> str:
+def build_user_prompt(
+    hanzi: str, seed_pinyin: Optional[str], source_meanings: Optional[list], previous_error: Optional[str] = None
+) -> str:
     meanings_str = "; ".join(source_meanings) if source_meanings else "(sin datos)"
-    return (
+    prompt = (
         f"hanzi: {hanzi}\n"
         f"pinyin de referencia (sin verificar): {seed_pinyin or '(sin datos)'}\n"
         f"significados en inglés de la fuente (solo referencia, no traducir literalmente): {meanings_str}\n"
     )
+    if previous_error:
+        prompt += (
+            f"\nIMPORTANTE: un intento anterior fue rechazado por este motivo: {previous_error}\n"
+            f"Corrige específicamente eso en este nuevo intento — no repitas el mismo error.\n"
+        )
+    return prompt
 
 
 def generate_word_prep(
@@ -58,9 +67,10 @@ def generate_word_prep(
     seed_pinyin: Optional[str] = None,
     source_meanings: Optional[list] = None,
     model: str = "gpt-4o",
+    previous_error: Optional[str] = None,
 ) -> WordPrepOutput:
     """Llama al LLM y devuelve las lecturas + colocaciones validadas para una palabra."""
-    user_prompt = build_user_prompt(hanzi, seed_pinyin, source_meanings)
+    user_prompt = build_user_prompt(hanzi, seed_pinyin, source_meanings, previous_error=previous_error)
     raw = call_llm(WORD_PREP_SYSTEM_PROMPT, user_prompt, model=model)
     try:
         data = json.loads(raw)
@@ -106,11 +116,29 @@ def _log_phase(conn, word_id: int, status: str, attempt: int, notes: str = "") -
 
 
 def _guardrail_context(hanzi: str, result: WordPrepOutput) -> str:
+    ref_sin_espacios = reference_pinyin(hanzi).replace(" ", "")
     return json.dumps(
         {
             "hanzi": hanzi,
+            "pinyin_mas_comun_segun_herramienta_SIN_ESPACIOS": ref_sin_espacios,
+            "nota_referencia": (
+                "el campo anterior es la lectura MÁS COMÚN calculada por una herramienta "
+                "determinística (no un LLM) — úsala como fuente de verdad para la lectura "
+                "is_primary=true en vez de recordar tonos de memoria. Cada lectura de abajo ya "
+                "trae su propio 'pinyin_sin_espacios' (mismo dato, sin separadores) — compara ESE "
+                "campo, sílaba por sílaba, contra la referencia; los espacios son solo un "
+                "separador visual, nunca una diferencia real de pronunciación. Las lecturas "
+                "is_primary=false son pronunciaciones secundarias legítimas y pueden no coincidir "
+                "con esta referencia a propósito; evalúalas con tu propio conocimiento."
+            ),
             "readings": [
-                {"pinyin": r.pinyin, "meaning_es": r.meaning_es, "meaning_zh": r.meaning_zh}
+                {
+                    "pinyin": r.pinyin,
+                    "pinyin_sin_espacios": r.pinyin.replace(" ", ""),
+                    "meaning_es": r.meaning_es,
+                    "meaning_zh": r.meaning_zh,
+                    "is_primary": r.is_primary,
+                }
                 for r in result.readings
             ],
         },
@@ -136,13 +164,21 @@ def run_word_prep(
     (son lentas) — abre una conexión corta solo para cada escritura, así
     no bloquea a otros nodos del grafo que escriben en paralelo.
     """
+    previous_error: Optional[str] = None
     for attempt in range(1, MAX_ATTEMPTS + 1):
         try:
-            result = generate_word_prep(hanzi, seed_pinyin, source_meanings, model=model)
+            result = generate_word_prep(hanzi, seed_pinyin, source_meanings, model=model, previous_error=previous_error)
+            for r in result.readings:
+                if r.is_primary:
+                    # No confiamos en que el LLM recuerde bien los tonos (incluido sandhi de
+                    # 不/一) — lo calcula la herramienta determinística. Las lecturas
+                    # secundarias/polífonas se dejan tal cual, pypinyin solo sabe la más común.
+                    r.pinyin = reference_pinyin(hanzi)
             guardrail_result = run_guardrail(WORD_PREP_GUARDRAIL_CHECKS, _guardrail_context(hanzi, result), model=model)
         except LLMError as ex:
+            previous_error = f"Respuesta del LLM inválida/no siguió el schema: {ex}"
             with get_connection() as conn:
-                _log_phase(conn, word_id, "failed", attempt, f"Respuesta del LLM inválida/no siguió el schema: {ex}")
+                _log_phase(conn, word_id, "failed", attempt, previous_error)
             continue
 
         if guardrail_result.passed:
@@ -151,10 +187,10 @@ def run_word_prep(
                 _log_phase(conn, word_id, "passed", attempt)
             return True
 
-        reasons = "; ".join(
+        previous_error = "; ".join(
             f"{name}: {check.reason}" for name, check in guardrail_result.checks.items() if not check.passed
         )
         with get_connection() as conn:
-            _log_phase(conn, word_id, "failed", attempt, reasons)
+            _log_phase(conn, word_id, "failed", attempt, previous_error)
 
     return False

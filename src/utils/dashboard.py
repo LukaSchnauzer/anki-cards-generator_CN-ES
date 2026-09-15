@@ -16,9 +16,12 @@ from src.generation.audio_gen import AUDIO_DIR
 
 
 def _where(hsk_level: Optional[int]) -> tuple:
+    """Filtra por mazo DESTINO (COALESCE(export_level, hsk_level)), no por el
+    hsk_level real de la palabra — así --hsk-level 3 también muestra las
+    palabras migradas manualmente a ese mazo vía export_level."""
     if hsk_level is None:
         return "", ()
-    return "WHERE w.hsk_level = ?", (hsk_level,)
+    return "WHERE COALESCE(w.export_level, w.hsk_level) = ?", (hsk_level,)
 
 
 def _status_table(conn, hsk_level: Optional[int]) -> Table:
@@ -128,21 +131,27 @@ def _stuck_word_prep_table(conn, hsk_level: Optional[int]) -> Table:
     clause = f"{where} AND" if where else "WHERE"
     rows = conn.execute(
         f"""
-        SELECT w.id, w.hanzi,
-               (SELECT COUNT(*) FROM generation_phases gp WHERE gp.word_id = w.id AND gp.phase = 'word_prep' AND gp.status = 'failed') AS fail_count
+        SELECT w.hanzi, w.word_prep_status, w.word_prep_attempts,
+               (SELECT COUNT(*) FROM generation_phases gp WHERE gp.word_id = w.id AND gp.phase = 'word_prep' AND gp.status = 'failed') AS fail_count,
+               (SELECT notes FROM generation_phases gp WHERE gp.word_id = w.id AND gp.phase = 'word_prep' ORDER BY gp.id DESC LIMIT 1) AS last_notes
         FROM words w
-        {clause} NOT EXISTS (SELECT 1 FROM readings r WHERE r.word_id = w.id AND r.source = 'llm')
-          AND EXISTS (SELECT 1 FROM generation_phases gp WHERE gp.word_id = w.id AND gp.phase = 'word_prep' AND gp.status = 'failed')
-        ORDER BY w.hanzi
+        {clause} w.word_prep_status IN ('failed', 'needs_human')
+        ORDER BY w.word_prep_status DESC, w.hanzi
         """,
         params,
     ).fetchall()
 
     table = Table(title="Palabras atascadas en word_prep (nunca resolvieron lectura)")
     table.add_column("Hanzi")
+    table.add_column("word_prep_status")
     table.add_column("Intentos fallidos", justify="right")
+    table.add_column("Rondas regen", justify="right")
+    table.add_column("Último motivo")
     for r in rows:
-        table.add_row(r["hanzi"], str(r["fail_count"]))
+        table.add_row(
+            r["hanzi"], r["word_prep_status"], str(r["fail_count"]), str(r["word_prep_attempts"]),
+            (r["last_notes"] or "")[:80],
+        )
     return table
 
 
