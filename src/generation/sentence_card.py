@@ -29,7 +29,7 @@ from src.generation.card_common import (
 )
 from src.generation.guardrail import run_guardrail
 from src.generation.prompts import SENTENCE_CARD_SYSTEM_PROMPT
-from src.llm.client import LLMError, call_llm
+from src.llm.client import GENERATION_MODEL, LLMError, call_llm
 
 MAX_ATTEMPTS = 3
 PHASE = "sentence_card"
@@ -43,7 +43,7 @@ SENTENCE_CARD_GUARDRAIL_CHECKS = [
 
 
 def generate_sentence_card(
-    hanzi: str, pinyin: str, meaning_es: str, meaning_zh: str, model: str = "gpt-4o",
+    hanzi: str, pinyin: str, meaning_es: str, meaning_zh: str, model: str = GENERATION_MODEL,
     previous_error: Optional[str] = None,
 ) -> CardExampleOutput:
     user_prompt = build_user_prompt(hanzi, pinyin, meaning_es, meaning_zh, previous_error=previous_error)
@@ -56,7 +56,7 @@ def generate_sentence_card(
 
 
 def run_sentence_card(
-    card_id: int, reading_id: int, hanzi: str, pinyin: str, meaning_es: str, meaning_zh: str, model: str = "gpt-4o"
+    card_id: int, reading_id: int, hanzi: str, pinyin: str, meaning_es: str, meaning_zh: str, model: str = GENERATION_MODEL
 ) -> bool:
     """Genera + verifica + guarda la SentenceCard, con reintentos.
 
@@ -73,7 +73,7 @@ def run_sentence_card(
             result = generate_sentence_card(hanzi, pinyin, meaning_es, meaning_zh, model=model, previous_error=previous_error)
             apply_reference_pinyin(result)
             checks = guardrail_checks_for(SENTENCE_CARD_GUARDRAIL_CHECKS, hanzi)
-            guardrail_result = run_guardrail(checks, guardrail_context(hanzi, result), model=model)
+            guardrail_result = run_guardrail(checks, guardrail_context(hanzi, result))
         except LLMError as ex:
             previous_error = f"Respuesta del LLM inválida/no siguió el schema: {ex}"
             with get_connection() as conn:

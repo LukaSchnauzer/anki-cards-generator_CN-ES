@@ -16,7 +16,15 @@ from src.utils.cost_tracker import get_tracker
 load_dotenv()
 
 OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
-DEFAULT_MODEL = "gpt-4o"
+
+# Modelos configurables por separado en .env — generación y guardrail tienen
+# perfiles de costo/calidad distintos (el guardrail es una tarea de
+# verificación, no de creación de contenido), así que no tiene por qué usar
+# el mismo modelo caro. Default a gpt-4o en ambos si no se define nada, para
+# no cambiar el comportamiento actual silenciosamente.
+GENERATION_MODEL = os.getenv("LLM_GENERATION_MODEL", "gpt-4o")
+GUARDRAIL_MODEL = os.getenv("LLM_GUARDRAIL_MODEL", "gpt-4o")
+DEFAULT_MODEL = GENERATION_MODEL
 
 
 class LLMError(RuntimeError):

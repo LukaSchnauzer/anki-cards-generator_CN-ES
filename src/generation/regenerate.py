@@ -19,11 +19,16 @@ import argparse
 import json
 from typing import Optional
 
+from rich.console import Console
+from rich.progress import BarColumn, Progress, TextColumn, TimeElapsedColumn, TimeRemainingColumn
+
 from src.db.database import get_connection, init_db
+from src.llm.client import GENERATION_MODEL
 from src.generation.audio_card import run_audio_card
 from src.generation.graph import card_audio_node, get_checkpointer, run_word
 from src.generation.pattern_card import run_pattern_card
 from src.generation.sentence_card import run_sentence_card
+from src.utils.cost_tracker import get_tracker
 
 RUNNERS = {"sentence": run_sentence_card, "pattern": run_pattern_card, "audio": run_audio_card}
 
@@ -42,7 +47,7 @@ def _fetch_context(word_id: int, card_type: str):
     return word, primary, card
 
 
-def regenerate_card(word_id: int, card_type: str, model: str = "gpt-4o") -> bool:
+def regenerate_card(word_id: int, card_type: str, model: str = GENERATION_MODEL) -> bool:
     """Regenera el texto + audio de una tarjeta puntual. Devuelve True si
     quedó 'ready' de nuevo. Solo toca SQLite — NO habla con Anki (ni sube el
     contenido nuevo ni limpia el flag): eso lo hace `export`, que es quien de
@@ -93,7 +98,7 @@ def regenerate_card(word_id: int, card_type: str, model: str = "gpt-4o") -> bool
     return audio_ok
 
 
-def regenerate_word_prep(word_id: int, model: str = "gpt-4o") -> bool:
+def regenerate_word_prep(word_id: int, model: str = GENERATION_MODEL) -> bool:
     """Reintenta word_prep para una palabra en word_prep_status='failed'.
 
     Si resuelve, corre el grafo completo (`run_word`) — no solo word_prep —
@@ -129,7 +134,7 @@ def regenerate_word_prep(word_id: int, model: str = "gpt-4o") -> bool:
     return ok
 
 
-def regenerate_flagged(hsk_level: Optional[int] = None, model: str = "gpt-4o") -> dict:
+def regenerate_flagged(hsk_level: Optional[int] = None, model: str = GENERATION_MODEL) -> dict:
     """Regenera todo lo que esté en review_status='flagged_bad' o
     status='guardrail_failed' (opcionalmente filtrado por nivel HSK), y
     también las palabras en word_prep_status='failed'. NO toca lo escalado a
@@ -139,23 +144,6 @@ def regenerate_flagged(hsk_level: Optional[int] = None, model: str = "gpt-4o") -
     if hsk_level is not None:
         wp_query += " AND COALESCE(export_level, hsk_level) = ?"
         wp_params = (hsk_level,)
-
-    with get_connection() as conn:
-        wp_rows = conn.execute(wp_query, wp_params).fetchall()
-
-    wp_details = []
-    wp_fixed = 0
-    wp_escalated = 0
-    for row in wp_rows:
-        ok = regenerate_word_prep(row["word_id"], model=model)
-        wp_details.append({"hanzi": row["hanzi"], "word_id": row["word_id"], "fixed": ok})
-        if ok:
-            wp_fixed += 1
-        else:
-            with get_connection() as conn:
-                st = conn.execute("SELECT word_prep_status FROM words WHERE id = ?", (row["word_id"],)).fetchone()
-            if st["word_prep_status"] == "needs_human":
-                wp_escalated += 1
 
     query = """
         SELECT c.id AS card_id, c.word_id, c.card_type, w.hanzi
@@ -169,21 +157,81 @@ def regenerate_flagged(hsk_level: Optional[int] = None, model: str = "gpt-4o") -
         params = (hsk_level,)
 
     with get_connection() as conn:
+        wp_rows = conn.execute(wp_query, wp_params).fetchall()
         rows = conn.execute(query, params).fetchall()
 
+    console = Console()
+    tracker = get_tracker()
+    total_items = len(wp_rows) + len(rows)
+
+    wp_details = []
+    wp_fixed = 0
+    wp_escalated = 0
     details = []
     fixed = 0
     escalated = 0
-    for row in rows:
-        ok = regenerate_card(row["word_id"], row["card_type"], model=model)
-        details.append({"hanzi": row["hanzi"], "word_id": row["word_id"], "card_type": row["card_type"], "fixed": ok})
-        if ok:
-            fixed += 1
-        else:
-            with get_connection() as conn:
-                rs = conn.execute("SELECT review_status FROM cards WHERE id = ?", (row["card_id"],)).fetchone()
-            if rs["review_status"] == "needs_human":
-                escalated += 1
+
+    with Progress(
+        TextColumn("[bold cyan]{task.fields[label]}"),
+        BarColumn(bar_width=28),
+        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+        TextColumn("({task.completed}/{task.total})"),
+        TimeElapsedColumn(),
+        TextColumn("ETA"),
+        TimeRemainingColumn(),
+        TextColumn(
+            "[green]LLM ${task.fields[llm_cost]:.3f}[/green]  "
+            "[magenta]11L ${task.fields[el_cost]:.3f}[/magenta]  "
+            "[bold white]tot ${task.fields[total_cost]:.3f}[/bold white]"
+        ),
+        console=console,
+    ) as progress:
+        task = progress.add_task(
+            "regenerando",
+            total=total_items or 1,
+            label="iniciando…",
+            llm_cost=0.0,
+            el_cost=0.0,
+            total_cost=0.0,
+        )
+
+        for row in wp_rows:
+            progress.update(task, label=f"{row['hanzi']} (word_id={row['word_id']}) · word_prep")
+            ok = regenerate_word_prep(row["word_id"], model=model)
+            wp_details.append({"hanzi": row["hanzi"], "word_id": row["word_id"], "fixed": ok})
+            if ok:
+                wp_fixed += 1
+            else:
+                with get_connection() as conn:
+                    st = conn.execute("SELECT word_prep_status FROM words WHERE id = ?", (row["word_id"],)).fetchone()
+                if st["word_prep_status"] == "needs_human":
+                    wp_escalated += 1
+            progress.update(
+                task, advance=1, llm_cost=tracker.llm_cost_usd, el_cost=tracker.elevenlabs_cost_usd,
+                total_cost=tracker.total_cost_usd,
+            )
+
+        for row in rows:
+            progress.update(task, label=f"{row['hanzi']} (word_id={row['word_id']}) · {row['card_type']}")
+            ok = regenerate_card(row["word_id"], row["card_type"], model=model)
+            details.append({"hanzi": row["hanzi"], "word_id": row["word_id"], "card_type": row["card_type"], "fixed": ok})
+            if ok:
+                fixed += 1
+            else:
+                with get_connection() as conn:
+                    rs = conn.execute("SELECT review_status FROM cards WHERE id = ?", (row["card_id"],)).fetchone()
+                if rs["review_status"] == "needs_human":
+                    escalated += 1
+            progress.update(
+                task, advance=1, llm_cost=tracker.llm_cost_usd, el_cost=tracker.elevenlabs_cost_usd,
+                total_cost=tracker.total_cost_usd,
+            )
+
+    console.print(
+        f"Costo estimado (precio de lista): [bold]${tracker.total_cost_usd:.4f}[/bold]"
+        f"  ·  LLM ${tracker.llm_cost_usd:.4f} ({tracker.llm_calls} llamadas)"
+        f"  ·  ElevenLabs ${tracker.elevenlabs_cost_usd:.4f} ({tracker.elevenlabs_calls} llamadas)"
+    )
 
     return {
         "word_prep_total": len(wp_rows),

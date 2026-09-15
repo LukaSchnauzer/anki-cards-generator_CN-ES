@@ -12,7 +12,7 @@ from typing import Dict, List
 from pydantic import BaseModel, ValidationError, create_model
 
 from src.generation.prompts import GUARDRAIL_CHECKS, GUARDRAIL_SYSTEM_PROMPT_TEMPLATE
-from src.llm.client import LLMError, call_llm
+from src.llm.client import GUARDRAIL_MODEL, LLMError, call_llm
 
 
 class CheckResult(BaseModel):
@@ -44,7 +44,7 @@ def _build_output_model(check_ids: List[str]):
     return create_model("DynamicGuardrailOutput", **fields)
 
 
-def run_guardrail(check_ids: List[str], content_context: str, model: str = "gpt-4o") -> GuardrailResult:
+def run_guardrail(check_ids: List[str], content_context: str, model: str = GUARDRAIL_MODEL) -> GuardrailResult:
     """Corre el guardrail sobre `content_context` (texto describiendo lo generado) para los
     checks pedidos. Devuelve el resultado global y el detalle de cada check."""
     system_prompt = _build_prompt(check_ids)

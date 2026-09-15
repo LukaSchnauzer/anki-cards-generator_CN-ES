@@ -17,11 +17,28 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from src.db.database import get_connection
 from src.generation.guardrail import run_guardrail
 from src.generation.prompts import WORD_PREP_SYSTEM_PROMPT
-from src.llm.client import LLMError, call_llm
+from src.llm.client import GENERATION_MODEL, LLMError, call_llm
 from src.utils.pinyin_ref import reference_pinyin
 
 MAX_ATTEMPTS = 3
 WORD_PREP_GUARDRAIL_CHECKS = ["pinyin_accuracy", "meaning_not_archaic_or_surname"]
+
+
+def _checks_for(result: "WordPrepOutput") -> List[str]:
+    """Quita 'pinyin_accuracy' de la lista si NINGUNA lectura es secundaria.
+    La lectura primaria ya se sobreescribe con reference_pinyin() antes de
+    llegar acá (ver run_word_prep), así que verificarla con el LLM no tiene
+    ningún propósito — y darle la oportunidad de "verificar" algo que ya es
+    correcto por construcción solo invita a que alucine un rechazo (visto en
+    到底/合格/坏人/etc.: el campo 'pinyin_sin_espacios' ya resolvía esto,
+    pero el LLM igual comparaba el campo crudo con espacio — no es 100%
+    confiable ni con la referencia puesta enfrente, así que mejor no
+    preguntarle en absoluto cuando no hace falta). Solo queda el check
+    cuando SÍ hay una lectura secundaria/polífona genuina, que pypinyin no
+    puede verificar (solo sabe la más común)."""
+    if not any(not r.is_primary for r in result.readings):
+        return [c for c in WORD_PREP_GUARDRAIL_CHECKS if c != "pinyin_accuracy"]
+    return WORD_PREP_GUARDRAIL_CHECKS
 
 
 class ReadingOut(BaseModel):
@@ -66,7 +83,7 @@ def generate_word_prep(
     hanzi: str,
     seed_pinyin: Optional[str] = None,
     source_meanings: Optional[list] = None,
-    model: str = "gpt-4o",
+    model: str = GENERATION_MODEL,
     previous_error: Optional[str] = None,
 ) -> WordPrepOutput:
     """Llama al LLM y devuelve las lecturas + colocaciones validadas para una palabra."""
@@ -151,7 +168,7 @@ def run_word_prep(
     hanzi: str,
     seed_pinyin: Optional[str] = None,
     source_meanings: Optional[list] = None,
-    model: str = "gpt-4o",
+    model: str = GENERATION_MODEL,
 ) -> bool:
     """Genera + verifica + guarda word_prep para una palabra, con reintentos.
 
@@ -174,7 +191,8 @@ def run_word_prep(
                     # 不/一) — lo calcula la herramienta determinística. Las lecturas
                     # secundarias/polífonas se dejan tal cual, pypinyin solo sabe la más común.
                     r.pinyin = reference_pinyin(hanzi)
-            guardrail_result = run_guardrail(WORD_PREP_GUARDRAIL_CHECKS, _guardrail_context(hanzi, result), model=model)
+            checks = _checks_for(result)
+            guardrail_result = run_guardrail(checks, _guardrail_context(hanzi, result))
         except LLMError as ex:
             previous_error = f"Respuesta del LLM inválida/no siguió el schema: {ex}"
             with get_connection() as conn:
