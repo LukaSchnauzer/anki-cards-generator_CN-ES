@@ -73,7 +73,7 @@ def regenerate_card(word_id: int, card_type: str, model: str = GENERATION_MODEL)
     with get_connection() as conn:
         if audio_ok:
             conn.execute(
-                """UPDATE cards SET review_status = 'pending', review_notes = NULL, regen_attempts = 0,
+                """UPDATE cards SET review_status = 'unflagged', review_notes = NULL, regen_attempts = 0,
                    updated_at = datetime('now') WHERE id = ?""",
                 (card["id"],),
             )

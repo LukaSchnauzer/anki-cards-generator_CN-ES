@@ -73,7 +73,7 @@ def _guardrail_failed_table(conn, hsk_level: Optional[int]) -> Table:
     clause = f"{where} AND" if where else "WHERE"
     rows = conn.execute(
         f"""
-        SELECT w.hanzi, c.id AS card_id, c.card_type, c.regen_attempts,
+        SELECT w.hanzi, c.id AS card_id, c.card_type, c.review_status, c.regen_attempts,
                (SELECT COUNT(*) FROM generation_phases gp
                 WHERE gp.card_id = c.id AND gp.phase = c.card_type || '_card' AND gp.status = 'failed') AS fail_count,
                (SELECT notes FROM generation_phases gp
@@ -88,11 +88,15 @@ def _guardrail_failed_table(conn, hsk_level: Optional[int]) -> Table:
     table = Table(title="Fallando guardrails (status='guardrail_failed')")
     table.add_column("Hanzi")
     table.add_column("Tipo")
+    table.add_column("review_status")
     table.add_column("Intentos fallidos", justify="right")
     table.add_column("Rondas regen", justify="right")
     table.add_column("Último motivo")
     for r in rows:
-        table.add_row(r["hanzi"], r["card_type"], str(r["fail_count"]), str(r["regen_attempts"]), (r["last_notes"] or "")[:80])
+        table.add_row(
+            r["hanzi"], r["card_type"], r["review_status"], str(r["fail_count"]), str(r["regen_attempts"]),
+            (r["last_notes"] or "")[:80],
+        )
     return table
 
 

@@ -29,6 +29,13 @@ def _migrate(conn: sqlite3.Connection) -> None:
     if "word_prep_attempts" not in word_cols:
         conn.execute("ALTER TABLE words ADD COLUMN word_prep_attempts INTEGER NOT NULL DEFAULT 0")
 
+    # Rename de dato (no de columna): review_status='pending' -> 'unflagged'.
+    # El nombre viejo confundía dos ejes distintos (progreso de generación en
+    # cards.status vs. flag humano en cards.review_status, ambos con default
+    # 'pending'). Idempotente — no-op una vez que ya no queda ninguna fila
+    # con el valor viejo.
+    conn.execute("UPDATE cards SET review_status = 'unflagged' WHERE review_status = 'pending'")
+
 
 def init_db(db_path: Path = DEFAULT_DB_PATH) -> None:
     """Crea la base de datos y aplica el esquema si no existen las tablas."""
