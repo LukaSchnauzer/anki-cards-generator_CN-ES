@@ -44,8 +44,10 @@ CREATE TABLE IF NOT EXISTS cards (
     word_id        INTEGER NOT NULL REFERENCES words(id) ON DELETE CASCADE,
     card_type      TEXT NOT NULL CHECK (card_type IN ('sentence', 'pattern', 'audio')),
     status         TEXT NOT NULL DEFAULT 'pending',        -- pending|generated|guardrail_failed|guardrail_passed|ready
-    review_status  TEXT NOT NULL DEFAULT 'pending',        -- pending|approved|flagged_bad
+    review_status  TEXT NOT NULL DEFAULT 'pending',        -- pending|flagged_bad|needs_human (needs_human = agotó el tope de regenerate --flagged, requiere intervención)
     review_notes   TEXT,
+    regen_attempts INTEGER NOT NULL DEFAULT 0,             -- rondas de regenerate_card fallidas consecutivas desde el último éxito
+    anki_note_id   INTEGER,                                -- noteId de AnkiConnect una vez exportada (NULL = nunca exportada)
     created_at     TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at     TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE (word_id, card_type)

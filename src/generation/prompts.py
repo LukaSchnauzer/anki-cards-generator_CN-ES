@@ -82,10 +82,16 @@ GUARDRAIL_CHECKS = {
     ),
     "breakdown_accuracy": (
         "breakdown_accuracy: revisa el desglose palabra por palabra de la oración (lista de "
-        "elementos con hanzi/pinyin/función gramatical/significado). ¿La segmentación en "
-        "palabras es razonable, el pinyin de cada elemento es correcto, y el significado dado "
-        "es el correcto PARA ESE CONTEXTO específico (no una definición genérica de diccionario "
-        "si el contexto pide otra cosa, como ocurre con partículas como 了/的/着/得)?"
+        "elementos con hanzi/pinyin/función gramatical/significado). Evalúa SOLO estas dos "
+        "cosas, que son objetivamente verificables: (1) ¿el pinyin de cada elemento es "
+        "correcto? (2) ¿el significado dado es el correcto PARA ESE CONTEXTO específico (no "
+        "una definición genérica de diccionario si el contexto pide otra cosa, como ocurre con "
+        "partículas como 了/的/着/得)? NO evalúes ni falles el check por la función gramatical "
+        "(grammar_role) — la clasificación gramatical de una palabra china es frecuentemente "
+        "debatible entre lingüistas (ej. si 需要 en cierto contexto es 'verbo' o 'sustantivo', "
+        "o si una palabra dentro de un compuesto es 'adjetivo' o 'parte del compuesto'), así que "
+        "ese campo es puramente informativo y no debe poder tumbar este check bajo ninguna "
+        "circunstancia, sin importar qué tan cuestionable te parezca la etiqueta."
     ),
     "translation_accuracy": (
         "translation_accuracy: ¿la traducción al español refleja fielmente el significado de la "

@@ -1,11 +1,11 @@
 """AnkiConnect API utilities."""
 
+import base64
 import json
 import os
 import sys
-import hashlib
 import urllib.request
-from typing import Optional
+from pathlib import Path
 from dotenv import load_dotenv
 
 # Cargar variables de entorno
@@ -13,7 +13,6 @@ load_dotenv()
 
 ANKI_CONNECT_URL = os.environ.get("ANKI_CONNECT_URL", "http://localhost:8765")
 DECK_NAME = os.environ.get("ANKI_DECK_NAME", "Chino SRS")
-AUDIO_DIR = os.environ.get("ANKI_AUDIO_DIR", "")
 
 
 def post(action: str, **params):
@@ -57,6 +56,39 @@ def ensure_deck(deck_name: str):
         post("createDeck", deck=deck_name)
 
 
+def store_media_file(abs_path: Path) -> str:
+    """Sube un archivo al folder de medios de Anki. Devuelve el filename a usar
+    en los campos de la nota (ej. src="archivo.mp3" en un <audio>).
+
+    El nombre del archivo ya viene hasheado por contenido (ver audio_gen.py),
+    así que subir el mismo archivo dos veces es un no-op idempotente para Anki."""
+    filename = Path(abs_path).name
+    data_b64 = base64.b64encode(Path(abs_path).read_bytes()).decode("ascii")
+    post("storeMediaFile", filename=filename, data=data_b64)
+    return filename
+
+
+def clear_note_flags(note_id: int, only_if_flag: int = 1) -> None:
+    """Pone en 0 (sin bandera) el flag de las cartas de una nota, pero SOLO
+    si esa carta tiene puesto justo `only_if_flag` (rojo=1 por convención de
+    este flujo de revisión). Nunca toca otros colores — el usuario puede
+    estar usándolos para lo suyo (ej. marcar tarjetas ya aprendidas), y este
+    flujo no debe pisarlos.
+
+    Usa `setSpecificValueOfCard`, una acción "peligrosa" de AnkiConnect que
+    escribe directo un campo interno de la carta — probada a mano contra una
+    nota real antes de usarla acá. Firma real (no documentada de forma
+    obvia): `card` es UN id a la vez (no una lista), y `newValues` debe ir
+    como entero, no string.
+    """
+    card_ids = post("findCards", query=f"nid:{note_id}")
+    if not card_ids:
+        return
+    for c in post("cardsInfo", cards=card_ids):
+        if c["flags"] == only_if_flag:
+            post("setSpecificValueOfCard", card=c["cardId"], keys=["flags"], newValues=[0], warning_check=True)
+
+
 def model_exists(model_name: str) -> bool:
     """Check if a model/note type exists."""
     names = post("modelNames")
@@ -71,55 +103,3 @@ def delete_model(model_name: str):
             print(f"Deleted model: {model_name}")
         except Exception as e:
             print(f"Warning: Could not delete model {model_name}: {e}", file=sys.stderr)
-
-
-def resolve_audio_path(audio_field: str, hanzi: str) -> Optional[str]:
-    """
-    Resolve audio file path from CSV field or hanzi.
-    Returns absolute path if file exists, None otherwise.
-    """
-    if not audio_field:
-        audio_field = f"{hanzi}.mp3"
-    
-    if AUDIO_DIR:
-        candidate = os.path.join(AUDIO_DIR, audio_field)
-    else:
-        candidate = audio_field
-    
-    if os.path.isfile(candidate):
-        return os.path.abspath(candidate)
-    return None
-
-
-def find_audio_for_sentence(sentence: str, audio_dir: str = "resources/audios") -> Optional[str]:
-    """
-    Find audio file for a given sentence using hash-based matching.
-    Returns absolute path if found, None otherwise.
-    """
-    if not sentence or not os.path.isdir(audio_dir):
-        return None
-    
-    sentence_hash = hashlib.md5(sentence.encode('utf-8')).hexdigest()[:8]
-    
-    for filename in os.listdir(audio_dir):
-        if filename.endswith('.mp3') and sentence_hash in filename:
-            return os.path.abspath(os.path.join(audio_dir, filename))
-    
-    return None
-
-
-def find_audio_for_word(hanzi: str, audio_dir: str = "resources/audios") -> Optional[str]:
-    """
-    Find audio file for a given word (hanzi) using hash-based matching.
-    Returns absolute path if found, None otherwise.
-    """
-    if not hanzi or not os.path.isdir(audio_dir):
-        return None
-    
-    word_hash = hashlib.md5(hanzi.encode('utf-8')).hexdigest()[:8]
-    
-    for filename in os.listdir(audio_dir):
-        if filename.startswith('word_') and filename.endswith('.mp3') and word_hash in filename:
-            return os.path.abspath(os.path.join(audio_dir, filename))
-    
-    return None

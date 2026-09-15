@@ -49,8 +49,13 @@ def get_hsk_info(levels):
     return None, None
 
 
-def load_entries(conn, entries):
-    stats = {"words_new": 0, "words_existing": 0, "readings_seeded": 0, "cards_created": 0}
+def load_entries(conn, entries, hsk_level_filter=None):
+    """Carga entradas en la DB. Por defecto (`hsk_level_filter=None`) carga todo
+    lo que traiga el JSON — pasar un nivel (ej. 3) para quedarse solo con esas
+    palabras, que es el alcance real del proyecto (solo HSK3 por ahora).
+    `complete.json` es el diccionario completo (HSK1-7+, 11k+ entradas), así
+    que cargarlo sin filtro mete miles de palabras fuera de alcance."""
+    stats = {"words_new": 0, "words_existing": 0, "readings_seeded": 0, "cards_created": 0, "skipped_other_level": 0}
 
     for e in entries:
         hanzi = e.get("simplified")
@@ -58,6 +63,10 @@ def load_entries(conn, entries):
             continue
 
         hsk_level, hsk_standard = get_hsk_info(e.get("level"))
+
+        if hsk_level_filter is not None and hsk_level != hsk_level_filter:
+            stats["skipped_other_level"] += 1
+            continue
         forms = e.get("forms") or []
         traditional = forms[0].get("traditional") if forms else None
         pinyin = forms[0].get("transcriptions", {}).get("pinyin") if forms else None
@@ -118,24 +127,33 @@ def load_entries(conn, entries):
 
 def main():
     parser = argparse.ArgumentParser(description="Carga un JSON de vocabulario HSK en la base SQLite")
-    parser.add_argument("--input", "-i", required=True, help="Ruta al JSON (ej. resources/hsk3.json)")
+    parser.add_argument("--input", "-i", required=True, help="Ruta al JSON (ej. resources/complete.json)")
     parser.add_argument("--db", default=str(DEFAULT_DB_PATH), help="Ruta a la base SQLite")
+    parser.add_argument(
+        "--hsk-level", type=int, default=3,
+        help="Solo carga palabras de este nivel HSK (default: 3, alcance actual del proyecto). "
+             "Pasar --hsk-level 0 carga TODO el JSON sin filtrar.",
+    )
     args = parser.parse_args()
 
     db_path = Path(args.db)
     init_db(db_path)
+
+    hsk_level_filter = None if args.hsk_level == 0 else args.hsk_level
 
     with open(args.input, "r", encoding="utf-8-sig") as f:
         data = json.load(f)
     entries = data if isinstance(data, list) else [data]
 
     with get_connection(db_path) as conn:
-        stats = load_entries(conn, entries)
+        stats = load_entries(conn, entries, hsk_level_filter=hsk_level_filter)
 
-    print(f"Palabras nuevas:      {stats['words_new']}")
-    print(f"Palabras ya existían: {stats['words_existing']}")
-    print(f"Lecturas sembradas:   {stats['readings_seeded']}")
-    print(f"Tarjetas creadas:     {stats['cards_created']}")
+    print(f"Palabras nuevas:        {stats['words_new']}")
+    print(f"Palabras ya existían:   {stats['words_existing']}")
+    print(f"Lecturas sembradas:     {stats['readings_seeded']}")
+    print(f"Tarjetas creadas:       {stats['cards_created']}")
+    if hsk_level_filter is not None:
+        print(f"Omitidas (otro nivel):  {stats['skipped_other_level']}")
 
 
 if __name__ == "__main__":

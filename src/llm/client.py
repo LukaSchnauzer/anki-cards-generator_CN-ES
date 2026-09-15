@@ -11,6 +11,8 @@ import os
 import requests
 from dotenv import load_dotenv
 
+from src.utils.cost_tracker import get_tracker
+
 load_dotenv()
 
 OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
@@ -43,4 +45,9 @@ def call_llm(system_prompt: str, user_prompt: str, model: str = DEFAULT_MODEL, t
     r = requests.post(OPENAI_API_URL, headers=headers, json=body, timeout=60)
     if r.status_code != 200:
         raise LLMError(f"Error de API {r.status_code}: {r.text}")
-    return r.json()["choices"][0]["message"]["content"]
+
+    data = r.json()
+    usage = data.get("usage", {})
+    get_tracker().add_llm_usage(usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0))
+
+    return data["choices"][0]["message"]["content"]

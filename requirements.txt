@@ -1,7 +1,7 @@
 requests
-edge-tts
 gtts
 python-dotenv
 langgraph
 langgraph-checkpoint-sqlite
 pydantic
+rich

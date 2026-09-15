@@ -12,6 +12,16 @@ SCHEMA_PATH = Path(__file__).resolve().parent / "schema.sql"
 DEFAULT_DB_PATH = Path(__file__).resolve().parents[2] / "outputs" / "chinosrs.db"
 
 
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Ajustes de esquema sobre una DB que ya existía antes de que se agregara
+    la columna (CREATE TABLE IF NOT EXISTS no la agrega a una tabla existente)."""
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(cards)").fetchall()}
+    if "anki_note_id" not in cols:
+        conn.execute("ALTER TABLE cards ADD COLUMN anki_note_id INTEGER")
+    if "regen_attempts" not in cols:
+        conn.execute("ALTER TABLE cards ADD COLUMN regen_attempts INTEGER NOT NULL DEFAULT 0")
+
+
 def init_db(db_path: Path = DEFAULT_DB_PATH) -> None:
     """Crea la base de datos y aplica el esquema si no existen las tablas."""
     db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -22,6 +32,7 @@ def init_db(db_path: Path = DEFAULT_DB_PATH) -> None:
         # uno con su propia conexión a este mismo archivo.
         conn.execute("PRAGMA journal_mode = WAL")
         conn.executescript(schema_sql)
+        _migrate(conn)
 
 
 @contextmanager

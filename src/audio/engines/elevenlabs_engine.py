@@ -7,6 +7,8 @@ import os
 import requests
 from dotenv import load_dotenv
 
+from src.utils.cost_tracker import get_tracker
+
 load_dotenv()
 
 API_URL = "https://api.elevenlabs.io/v1/text-to-speech/{voice_id}/with-timestamps"
@@ -52,6 +54,7 @@ class ElevenLabsEngine:
             os.makedirs(os.path.dirname(output_path), exist_ok=True)
             with open(output_path, "wb") as f:
                 f.write(audio_bytes)
+            get_tracker().add_elevenlabs_chars(len(text))
             return data.get("alignment")
         except Exception as ex:
             print(f"  ERROR ElevenLabs: {ex}")
